@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tag Prompt Manager & Translator</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & FontAwesome Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    body {
+      font-family: 'Noto Sans TC', 'Segoe UI', sans-serif;
+      background: radial-gradient(120% 120% at 50% 10%, #f0f7ff 0%, #e0eefe 100%);
+      min-height: 100vh;
+    }
+    .monospace {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* 玻璃貼片擬物特效 */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    .glass-tag {
+      background: rgba(219, 234, 254, 0.75);
+      border: 1px solid rgba(191, 219, 254, 0.8);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-tag:hover {
+      background: rgba(191, 219, 254, 0.9);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+    /* 拖曳時的視覺反饋 */
+    .glass-tag.dragging {
+      opacity: 0.4;
+      transform: scale(0.95);
+      border: 2px dashed #3b82f6;
+    }
+    .glass-tag.drag-over {
+      border: 2px dashed #10b981;
+      transform: scale(1.05);
+    }
+
+    /* 分類邊框顏色區隔 */
+    .category-character { border-left: 4px solid #f43f5e !important; }
+    .category-clothing { border-left: 4px solid #3b82f6 !important; }
+    .category-action { border-left: 4px solid #10b981 !important; }
+    .category-background { border-left: 4px solid #f59e0b !important; }
+    .category-style { border-left: 4px solid #8b5cf6 !important; }
+    .category-misc { border-left: 4px solid #64748b !important; }
+
+    /* 隱藏標籤樣式 */
+    .tag-hidden {
+      background: rgba(229, 231, 235, 0.5) !important;
+      border-color: rgba(209, 213, 219, 0.6) !important;
+      color: #9ca3af !important;
+      opacity: 0.6;
+      border-left-width: 1px !important;
+    }
+    /* 自訂滾動條 */
+    .custom-scrollbar::-webkit-scrollbar, ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.5);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.8);
+    }
+    /* 彈跳動畫 */
+    @keyframes scaleIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .animate-scale-in {
+      animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="text-slate-800 antialiased p-4 md:p-8 flex flex-col items-center">
+
+  <!-- 頂部標題區 -->
+  <header class="w-full max-w-5xl flex flex-col items-center mt-4 mb-4 relative">
+    <h1 class="text-3xl md:text-4xl font-black text-slate-800 tracking-wider flex items-center gap-3" translate="no">
+      標籤翻譯與整理系統
+    </h1>
+    <p class="text-xs md:text-sm text-slate-500 mt-2 font-medium">整理、排序、多槽轉盤、自動翻譯您的 AI Prompt 標籤</p>
+    
+    <!-- 試算表同步狀態 -->
+    <div id="syncStatusBadge" class="mt-3 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1.5">
+      <i class="fa-solid fa-sync animate-spin" id="statusSpinner"></i>
+      <span id="statusText">正在連線 Google 試算表詞庫...</span>
+    </div>
+
+    <!-- 功能控制按鈕列 (加入槽位分頁籤) -->
+    <div class="flex gap-3 mt-6 items-center flex-wrap justify-center">
+      <!-- Prompt 槽位群組 -->
+      <div class="flex items-center gap-1.5 bg-white/60 p-1.5 rounded-full shadow-sm border border-slate-100 backdrop-blur-md">
+        <div id="promptTabsContainer" class="flex gap-1">
+          <!-- JS 動態產生分頁籤 -->
+        </div>
+        <div class="w-px h-5 bg-slate-300 mx-1"></div>
+        <button id="addPromptBtn" class="w-8 h-8 rounded-full bg-white text-blue-500 hover:bg-blue-50 hover:text-blue-600 shadow-sm border border-slate-100 flex items-center justify-center transition-all" title="新增 Prompt 槽位">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>
+
+      <button id="toggleInputBtn" class="flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-white shadow-md border border-slate-100 hover:bg-slate-50 text-slate-600 transition-all transform hover:scale-105 active:scale-95 focus:outline-none font-semibold text-sm" title="開啟輸入區域">
+        <i class="fa-solid fa-keyboard text-blue-500"></i> 開啟 Prompt 輸入區
+      </button>
+    </div>
+  </header>
+
+  <!-- 1-1. 原始資料輸入區 (抽屜式 modal) -->
+  <div id="inputDrawer" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+    <div class="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-100 p-6 md:p-8 animate-scale-in flex flex-col">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2" translate="no">
+          <i class="fa-solid fa-terminal text-blue-500"></i> 編輯目前 Prompt 槽位
+        </h3>
+        <button id="closeDrawerBtn" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      
+      <p class="text-xs text-slate-500 mb-3">請在下方貼上您整串的 Prompt。支援逗號、換行、句點及大寫 BREAK 拆解。</p>
+      
+      <textarea id="rawPromptInput" class="w-full h-80 p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none resize-none monospace text-sm md:text-base leading-relaxed text-slate-700 bg-slate-50/50" placeholder="例如：masterpiece, 1girl, hat..."></textarea>
+      
+      <div class="flex justify-end gap-3 mt-6">
+        <button id="cancelInputBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100 font-medium transition-all text-sm">
+          取消
+        </button>
+        <button id="confirmInputBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center gap-2">
+          確認載入 <i class="fa-solid fa-check"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主操作盤面 (1-2. 標籤展示區) -->
+  <main class="w-full max-w-5xl min-h-[50vh] rounded-3xl glass-card p-6 md:p-8 shadow-xl relative flex flex-col mb-24">
+    <!-- 頂部控制列：分類圖例 + 新增標籤按鈕 -->
+    <div class="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6 pb-4 border-b border-slate-100/60">
+      <div id="categoryLegendContainer" class="flex flex-wrap gap-2.5 text-[11px] md:text-xs font-semibold text-slate-500">
+        <!-- JS 動態產生圖例 -->
+      </div>
+      <button id="addNewTagBtn" class="shrink-0 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm border border-blue-100 transform hover:scale-105 active:scale-95">
+        <i class="fa-solid fa-plus"></i> 新增標籤
+      </button>
+    </div>
+
+    <!-- 標籤容器 -->
+    <div id="tagsContainer" class="flex flex-wrap gap-4 items-center content-start min-h-[30vh]">
+      <!-- 初始無內容提示 -->
+      <div id="emptyState" class="w-full py-16 flex flex-col items-center justify-center text-slate-400">
+        <div class="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4 text-blue-500">
+          <i class="fa-solid fa-tags text-2xl"></i>
+        </div>
+        <p class="font-medium text-slate-600">目前槽位沒有標籤</p>
+        <p class="text-xs text-slate-400 mt-1">請點擊上方的按鈕載入 Prompt、新增標籤或是點選右下角貼上</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 1-4. 標籤單點擊互動選單 (漂浮選單) -->
+  <div id="tagContextMenu" class="hidden absolute z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 w-48 animate-scale-in">
+    <div class="text-[11px] font-bold text-slate-400 px-3 py-1.5 border-b border-slate-50 truncate" id="menuTagTitle" translate="no">標籤選單</div>
+    <ul class="space-y-0.5 mt-1">
+      <li>
+        <button id="menuEditBtn" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-pen-to-square text-slate-400 w-4"></i> 編輯標籤
+        </button>
+      </li>
+      <li>
+        <button id="menuCopyBtn" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-copy text-slate-400 w-4"></i> 複製單詞
+        </button>
+      </li>
+      <li>
+        <button id="menuHideBtn" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-eye-slash text-slate-400 w-4" id="hideMenuIcon"></i> <span id="hideMenuText">隱藏標籤</span>
+        </button>
+      </li>
+      <li class="pt-1 border-t border-slate-50">
+        <button id="menuDeleteBtn" class="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-trash-can text-rose-400 w-4"></i> 移除標籤
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <!-- 1-4.A 漂浮編輯/新增小窗口 Modal -->
+  <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl w-full max-w-5xl shadow-2xl flex flex-col md:flex-row h-[90vh] md:h-[80vh] overflow-hidden animate-scale-in relative">
+      
+      <!-- 左側面板 -->
+      <div class="w-full md:w-[45%] p-6 md:p-8 flex flex-col overflow-y-auto custom-scrollbar">
+        <div class="flex justify-between items-center mb-6 shrink-0">
+          <h4 class="text-xl font-bold text-slate-800 flex items-center gap-2" translate="no">
+            <i class="fa-solid fa-sliders text-blue-500"></i> <span id="editModalTitle">編輯標籤設定</span>
+          </h4>
+          <button id="uploadNewTagBtn" class="hidden px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-indigo-100" title="上傳此單字至雲端待審核">
+            <i class="fa-solid fa-cloud-arrow-up"></i> 上傳詞彙
+          </button>
+        </div>
+        
+        <div class="space-y-5 flex-1">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex justify-between">
+              <span>1. 標籤單詞 (英文)</span>
+              <span class="text-[10px] text-blue-400 font-normal normal-case"><i class="fa-solid fa-info-circle"></i> 輸入逗號可拆分標籤</span>
+            </label>
+            <input type="text" id="editTagWord" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none monospace text-sm font-semibold text-slate-700" placeholder="支援輸入中英文觸發右側詞庫">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">2. 標籤分類</label>
+            <select id="editTagCategory" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none text-sm font-semibold text-slate-700 bg-white"></select>
+            <div id="customCategoryDiv" class="hidden mt-3 p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-2 animate-scale-in">
+              <input type="text" id="customCategoryInput" class="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium outline-none" placeholder="自訂分類名稱..." value="角色主體2">
+              <button id="btnConfirmCustomCat" type="button" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shrink-0">新增</button>
+              <button id="btnCancelCustomCat" type="button" class="px-2.5 py-1.5 border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 rounded-lg text-xs font-medium transition-all shrink-0">取消</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">3. 詞庫完整匹配 (唯讀)</label>
+            <div id="editTagLibraryInfo" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-500 flex flex-col gap-1 min-h-[60px] justify-start">
+              <div class="text-slate-400 italic text-[11px] text-center py-2">請輸入單詞以匹配詞庫</div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">4. 括號權重與數值</label>
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" data-brackets="" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-semibold">無</button>
+                <button type="button" data-brackets="()" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-mono font-bold">( )</button>
+                <button type="button" data-brackets="(())" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-mono font-bold">(( ))</button>
+                <button type="button" data-brackets="((()))" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-mono font-bold">((( )))</button>
+                <button type="button" data-brackets="[]" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-mono font-bold">[ ]</button>
+                <button type="button" data-brackets="{}" class="bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-mono font-bold">{ }</button>
+              </div>
+              <div class="flex items-center gap-3">
+                <input type="range" id="editTagWeightRange" min="0.1" max="2.0" step="0.05" class="flex-1 accent-blue-600">
+                <div class="flex items-center gap-1">
+                  <input type="text" id="editTagWeightInput" class="w-14 px-2 py-1 text-center border border-slate-200 rounded-lg monospace text-xs font-bold" placeholder="1.0">
+                  <button id="clearWeightBtn" class="text-xs text-rose-500 hover:text-rose-600 p-1 font-semibold">清除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 shrink-0">
+          <button id="cancelEditBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-all">取消</button>
+          <button id="confirmEditBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all shadow-lg shadow-blue-500/10">確認儲存</button>
+        </div>
+      </div>
+
+      <!-- 右側面板：動態提示詞庫 -->
+      <div class="w-full md:w-[55%] bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 p-5 md:p-6 flex flex-col overflow-hidden relative">
+        <h4 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2 shrink-0">
+          <i class="fa-solid fa-book-open text-indigo-500"></i> 提示詞庫匹配
+        </h4>
+        
+        <div class="flex flex-col gap-2 mb-3 shrink-0">
+          <select id="dictFilterCategory" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all">
+            <option value="">-- 所有大分類 --</option>
+          </select>
+          <div class="flex gap-2">
+            <select id="dictFilterSub1" class="w-1/3 px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white outline-none focus:border-indigo-300"><option value="">子分類 1</option></select>
+            <select id="dictFilterSub2" class="w-1/3 px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white outline-none focus:border-indigo-300"><option value="">子分類 2</option></select>
+            <select id="dictFilterSub3" class="w-1/3 px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white outline-none focus:border-indigo-300"><option value="">子分類 3</option></select>
+          </div>
+        </div>
+
+        <div id="dictResultsList" class="flex-1 overflow-y-auto space-y-2 pr-1.5 custom-scrollbar pb-4">
+          <div class="text-center text-slate-400 text-xs italic py-10">載入詞庫中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 勾選式清除確認 Modal -->
+  <div id="clearConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-6 animate-scale-in text-center flex flex-col max-h-[80vh]">
+      <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 shrink-0">
+        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+      </div>
+      <h4 class="text-lg font-bold text-slate-800 mb-2 shrink-0">清除 PROMPT 資料</h4>
+      <p class="text-xs text-slate-500 mb-4 shrink-0">請勾選您想要清除的 Prompt 槽位：</p>
+      
+      <!-- 動態載入 Checkboxes 區 -->
+      <div id="clearPromptCheckboxes" class="flex flex-col gap-1 mb-6 text-left px-4 overflow-y-auto custom-scrollbar flex-1">
+        <!-- JS injects here -->
+      </div>
+
+      <div class="flex justify-center gap-3 shrink-0">
+        <button id="cancelClearBtn" class="px-5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-all">取消</button>
+        <button id="confirmClearBtn" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-lg shadow-rose-500/10">確認清空</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分類複製雙重選項下拉浮動選單 -->
+  <div id="copySelectionMenu" class="hidden fixed bottom-24 right-6 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 w-52 animate-scale-in">
+    <div class="text-[11px] font-bold text-slate-400 px-3 py-1.5 border-b border-slate-50">選擇複製方式</div>
+    <ul class="space-y-0.5 mt-1">
+      <li>
+        <button id="btnTraditionalCopy" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-align-left text-slate-400 w-4"></i> 傳統複製 (混搭單串)
+        </button>
+      </li>
+      <li>
+        <button id="btnCategorizedCopy" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-folder-tree text-indigo-500 w-4"></i> 分類複製 (格式化分組)
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <!-- 1-3. 右下快捷功能按鈕 (FAB) -->
+  <div class="fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+    <button id="toggleModeBtn" class="w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 transform hover:-translate-y-1 active:translate-y-0 transition-all" title="切換分類轉盤/通常模式">
+      <i class="fa-solid fa-layer-group text-xl"></i>
+    </button>
+    <button id="quickCopyBtn" class="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 transform hover:-translate-y-1 active:translate-y-0 transition-all" title="複製 Prompt">
+      <i class="fa-solid fa-copy text-xl"></i>
+    </button>
+    <button id="quickPasteBtn" class="w-14 h-14 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 flex items-center justify-center shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:translate-y-0 transition-all" title="貼上並追加至目前槽位">
+      <i class="fa-solid fa-paste text-xl text-slate-500"></i>
+    </button>
+    <button id="quickClearBtn" class="w-14 h-14 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:translate-y-0 transition-all" title="選擇並清除盤面">
+      <i class="fa-solid fa-trash-can text-xl"></i>
+    </button>
+  </div>
+
+  <div id="toast" class="hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm transition-opacity duration-300">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-green-400"></i>
+    <span id="toastMessage">成功！</span>
+  </div>
+
+  <!-- 上傳詞彙確認 Modal -->
+  <div id="uploadTagModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-6 animate-scale-in flex flex-col">
+      <h4 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-cloud-arrow-up text-indigo-500"></i> 上傳至雲端詞庫
+      </h4>
+      <p class="text-xs text-slate-500 mb-4">這將把當前單詞送至雲端試算表「待審」區。提供中文可幫助後續建檔。</p>
+      
+      <div class="space-y-3 mb-6">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">標籤單詞 (英文)</label>
+          <div id="uploadDisplayEnglish" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 font-semibold break-all"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">對應大分類</label>
+          <div id="uploadDisplayCategory" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">中文翻譯 (選填)</label>
+          <input type="text" id="uploadInputChinese" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none text-sm text-slate-700" placeholder="例如：花邊袖口">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2.5 shrink-0">
+        <button id="cancelUploadBtn" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-all">取消</button>
+        <button id="confirmUploadBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-1.5">
+          <i class="fa-solid fa-paper-plane"></i> 送出上傳
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay" class="hidden fixed inset-0 z-30" style="background: transparent;"></div>
+
+  <!-- 核心邏輯 -->
+  <script>
+    // -----------------------------------------
+    // 1. 多槽轉盤資料庫與狀態變數
+    // -----------------------------------------
+    let databaseTags = []; 
+    
+    // 多套 Prompt 管理 (轉盤槽位)
+    let prompts = [
+      { id: 'p1', name: '1', tags: [] }
+    ];
+    let promptCounter = 1;
+    let activePromptId = 'p1';   // 決定「通常模式」顯示哪個、以及「+新增標籤」加在哪
+    let categorySlots = {};      // 記錄轉盤模式下各分類指定哪個槽 { '角色主體': 'p1', '服裝物品': 'p2' }
+
+    let activeTagId = null;
+    let isCategorizationMode = false;
+    let checkedCategories = {}; 
+    let defaultCategories = ['角色主體', '服裝物品', '動作表達', '背景環境', '風格藝術', '雜代碼'];
+    let draggedTagId = null;
+
+    const CATEGORY_PRIORITY = ['動作表達', '背景環境', '服裝物品', '角色主體', '風格藝術', '雜代碼'];
+
+    // -----------------------------------------
+    // 2. DOM 節點
+    // -----------------------------------------
+    const toggleInputBtn = document.getElementById('toggleInputBtn');
+    const promptTabsContainer = document.getElementById('promptTabsContainer');
+    const addPromptBtn = document.getElementById('addPromptBtn');
+    const addNewTagBtn = document.getElementById('addNewTagBtn'); 
+    const toggleModeBtn = document.getElementById('toggleModeBtn');
+    const copySelectionMenu = document.getElementById('copySelectionMenu');
+    const btnTraditionalCopy = document.getElementById('btnTraditionalCopy');
+    const btnCategorizedCopy = document.getElementById('btnCategorizedCopy');
+
+    const inputDrawer = document.getElementById('inputDrawer');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+    const rawPromptInput = document.getElementById('rawPromptInput');
+    const confirmInputBtn = document.getElementById('confirmInputBtn');
+    const cancelInputBtn = document.getElementById('cancelInputBtn');
+    const tagsContainer = document.getElementById('tagsContainer');
+    const emptyState = document.getElementById('emptyState');
+    const categoryLegendContainer = document.getElementById('categoryLegendContainer');
+
+    const syncStatusBadge = document.getElementById('syncStatusBadge');
+    const statusSpinner = document.getElementById('statusSpinner');
+    const statusText = document.getElementById('statusText');
+
+    const tagContextMenu = document.getElementById('tagContextMenu');
+    const menuTagTitle = document.getElementById('menuTagTitle');
+    const menuEditBtn = document.getElementById('menuEditBtn');
+    const menuCopyBtn = document.getElementById('menuCopyBtn');
+    const menuHideBtn = document.getElementById('menuHideBtn');
+    const hideMenuIcon = document.getElementById('hideMenuIcon');
+    const hideMenuText = document.getElementById('hideMenuText');
+    const menuDeleteBtn = document.getElementById('menuDeleteBtn');
+    const overlay = document.getElementById('overlay');
+
+    const editModal = document.getElementById('editModal');
+    const editModalTitle = document.getElementById('editModalTitle');
+    const editTagWord = document.getElementById('editTagWord');
+    const editTagCategory = document.getElementById('editTagCategory');
+    const editTagLibraryInfo = document.getElementById('editTagLibraryInfo');
+    const editTagWeightRange = document.getElementById('editTagWeightRange');
+    const editTagWeightInput = document.getElementById('editTagWeightInput');
+    const clearWeightBtn = document.getElementById('clearWeightBtn');
+    const confirmEditBtn = document.getElementById('confirmEditBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const uploadNewTagBtn = document.getElementById('uploadNewTagBtn');
+
+    const dictFilterCategory = document.getElementById('dictFilterCategory');
+    const dictFilterSub1 = document.getElementById('dictFilterSub1');
+    const dictFilterSub2 = document.getElementById('dictFilterSub2');
+    const dictFilterSub3 = document.getElementById('dictFilterSub3');
+    const dictResultsList = document.getElementById('dictResultsList');
+
+    const customCategoryDiv = document.getElementById('customCategoryDiv');
+    const customCategoryInput = document.getElementById('customCategoryInput');
+    const btnConfirmCustomCat = document.getElementById('btnConfirmCustomCat');
+    const btnCancelCustomCat = document.getElementById('btnCancelCustomCat');
+
+    const clearConfirmModal = document.getElementById('clearConfirmModal');
+    const clearPromptCheckboxes = document.getElementById('clearPromptCheckboxes');
+    const cancelClearBtn = document.getElementById('cancelClearBtn');
+    const confirmClearBtn = document.getElementById('confirmClearBtn');
+    const quickClearBtn = document.getElementById('quickClearBtn');
+    const quickCopyBtn = document.getElementById('quickCopyBtn');
+    const quickPasteBtn = document.getElementById('quickPasteBtn');
+
+    // 上傳詞庫 Modal 節點
+    const uploadTagModal = document.getElementById('uploadTagModal');
+    const uploadDisplayEnglish = document.getElementById('uploadDisplayEnglish');
+    const uploadDisplayCategory = document.getElementById('uploadDisplayCategory');
+    const uploadInputChinese = document.getElementById('uploadInputChinese');
+    const cancelUploadBtn = document.getElementById('cancelUploadBtn');
+    const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+
+    // -----------------------------------------
+    // 3. 基礎工具與跨槽位全域解析
+    // -----------------------------------------
+    
+    // 提取所有曾經出現的類別 (預設 + 各槽位有的自訂)
+    function getAllCategories() {
+      let cats = new Set(defaultCategories);
+      prompts.forEach(p => p.tags.forEach(t => cats.add(t.category)));
+      return Array.from(cats);
+    }
+
+    function initCheckedCategories(allCats) {
+      allCats.forEach(cat => {
+        if (checkedCategories[cat] === undefined) checkedCategories[cat] = true;
+      });
+    }
+
+    function getTagGlobally(tagId) {
+      for (let p of prompts) {
+        let t = p.tags.find(tag => tag.id === tagId);
+        if (t) return t;
+      }
+      return null;
+    }
+
+    function removeTagGlobally(tagId) {
+      prompts.forEach(p => { p.tags = p.tags.filter(t => t.id !== tagId); });
+    }
+
+    function parsePrompt(text) {
+      if (!text || !text.trim()) return [];
+      let processed = text.replace(/\bBREAK\b/g, ',BREAK,');
+      processed = processed.replace(/(?<!\d)\.(?!\d)/g, ',');
+      
+      const rawTokens = processed.split(/,|\n/);
+      const parsedTags = [];
+
+      rawTokens.forEach(token => {
+        const trimmed = token.trim();
+        if (!trimmed) return;
+
+        let word = trimmed;
+        let weight = '';
+
+        const weightRegex = /:([0-9.]+)/;
+        const weightMatch = word.match(weightRegex);
+        if (weightMatch) {
+          weight = weightMatch[1];
+          word = word.replace(weightRegex, '');
+        }
+
+        let hasOuterBrackets = true;
+        let leftBrackets = '';
+        let rightBrackets = '';
+
+        while (hasOuterBrackets) {
+          const firstChar = word.charAt(0);
+          const lastChar = word.charAt(word.length - 1);
+          if (
+            (firstChar === '(' && lastChar === ')') ||
+            (firstChar === '[' && lastChar === ']') ||
+            (firstChar === '{' && lastChar === '}')
+          ) {
+            leftBrackets += firstChar;
+            rightBrackets = lastChar + rightBrackets;
+            word = word.substring(1, word.length - 1);
+          } else {
+            hasOuterBrackets = false;
+          }
+        }
+
+        const cleanWord = word.trim();
+        if (!cleanWord) return;
+
+        const category = predictCategory(cleanWord);
+
+        parsedTags.push({
+          id: 'tag_' + Math.random().toString(36).substring(2, 11),
+          raw: trimmed,
+          word: trimmed,
+          cleanWord: cleanWord,
+          leftBrackets: leftBrackets,
+          rightBrackets: rightBrackets,
+          weight: weight,
+          category: category,
+          isHidden: false
+        });
+      });
+      return parsedTags;
+    }
+
+    function predictCategory(tagWord) {
+      const lowerWord = tagWord.toLowerCase();
+      const exactMatch = databaseTags.find(item => item.english.toLowerCase() === lowerWord);
+      if (exactMatch && exactMatch.category) return normalizeCategoryName(exactMatch.category);
+
+      let matches = [];
+      databaseTags.forEach(item => {
+        const itemEng = item.english.toLowerCase();
+        if (itemEng && lowerWord.includes(itemEng)) matches.push(item);
+      });
+
+      if (matches.length > 0) {
+        let chosenCategory = null;
+        for (let i = 0; i < CATEGORY_PRIORITY.length; i++) {
+          const priorityCat = CATEGORY_PRIORITY[i];
+          if (matches.some(m => normalizeCategoryName(m.category) === priorityCat)) {
+            chosenCategory = priorityCat; break;
+          }
+        }
+        if (chosenCategory) return chosenCategory;
+        return normalizeCategoryName(matches[0].category);
+      }
+      return '雜代碼';
+    }
+
+    function normalizeCategoryName(rawCategory) {
+      if (!rawCategory) return '雜代碼';
+      const clean = rawCategory.trim();
+      if (clean.includes('角色') || clean.includes('身材') || clean.includes('頭髮') || clean.includes('皮膚') || clean.includes('年齡')) return '角色主體';
+      if (clean.includes('服裝') || clean.includes('服飾') || clean.includes('衣') || clean.includes('褲') || clean.includes('裙') || clean.includes('物品') || clean.includes('配件')) return '服裝物品';
+      if (clean.includes('動作') || clean.includes('表達') || clean.includes('姿勢') || clean.includes('表情')) return '動作表達';
+      if (clean.includes('背景') || clean.includes('環境') || clean.includes('場所') || clean.includes('物件') || clean.includes('海灘')) return '背景環境';
+      if (clean.includes('風格') || clean.includes('藝術') || clean.includes('構圖') || clean.includes('視角') || clean.includes('畫風')) return '風格藝術';
+      return '雜代碼';
+    }
+
+    // 取得指定槽位的純字串
+    function generatePromptTextFor(pid) {
+      const p = prompts.find(pr => pr.id === pid);
+      if(!p) return '';
+      return p.tags.filter(t => !t.isHidden).map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
+    }
+
+    function updateRawInput() {
+      rawPromptInput.value = generatePromptTextFor(activePromptId);
+    }
+
+    // -----------------------------------------
+    // 4. UI 卡片與轉盤渲染
+    // -----------------------------------------
+    
+    // 繪製上方的 (1) (2) 槽位籤
+    function renderTabs() {
+      promptTabsContainer.innerHTML = '';
+      prompts.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = `px-3.5 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm border ${p.id === activePromptId ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-white text-slate-500 hover:bg-slate-50 border-slate-100'}`;
+        btn.innerText = `( ${p.name} )`;
+        btn.onclick = () => selectTab(p.id);
+        promptTabsContainer.appendChild(btn);
+      });
+    }
+
+    function selectTab(pid) {
+      activePromptId = pid;
+      // "一鍵將下方的轉盤都切換到選項上" -> 點擊分頁等同於重置轉盤視角至該槽位
+      const allCats = getAllCategories();
+      allCats.forEach(cat => categorySlots[cat] = activePromptId);
+      renderTabs();
+      renderTags();
+      updateRawInput();
+    }
+
+    // 新增槽位
+    addPromptBtn.addEventListener('click', () => {
+      promptCounter++;
+      const newPid = 'p' + Math.random().toString(36).substr(2, 5);
+      prompts.push({ id: newPid, name: promptCounter.toString(), tags: [] });
+      selectTab(newPid);
+      showToast(`已建立 Prompt ( ${promptCounter} ) 空槽位！`, 'success');
+    });
+
+    function getCategoryBorderClass(category) {
+      if (category === '角色主體') return 'category-character';
+      if (category === '服裝物品') return 'category-clothing';
+      if (category === '動作表達') return 'category-action';
+      if (category === '背景環境') return 'category-background';
+      if (category === '風格藝術') return 'category-style';
+      if (category === '雜代碼') return 'category-misc';
+      if (category.includes('角色') || category.includes('Subject') || category.includes('1') || category.includes('2') || category.includes('3')) return 'category-character';
+      return 'category-misc';
+    }
+
+    function createTagCardElement(tag, currentListArray) {
+      const tagDiv = document.createElement('div');
+      tagDiv.id = tag.id;
+      
+      const catClass = getCategoryBorderClass(tag.category);
+      tagDiv.className = `glass-tag px-4 py-2.5 rounded-full flex items-center gap-2 cursor-pointer select-none text-sm font-semibold transition-all shadow-sm ${catClass} ${tag.isHidden ? 'tag-hidden' : ''}`;
+      
+      const plusIcon = document.createElement('span');
+      plusIcon.className = "text-blue-300 text-xs font-light mr-0.5";
+      plusIcon.innerHTML = '<i class="fa-solid fa-plus"></i>';
+      tagDiv.appendChild(plusIcon);
+
+      const contentContainer = document.createElement('div');
+      contentContainer.className = "flex items-center gap-1.5";
+
+      const rawPart = document.createElement('span');
+      rawPart.className = "notranslate text-blue-400 font-mono text-[13px] tracking-wide font-normal";
+      rawPart.setAttribute('translate', 'no');
+      rawPart.innerText = tag.cleanWord;
+      
+      const separator = document.createElement('span');
+      separator.className = "notranslate text-slate-300 text-[11px] font-normal";
+      separator.setAttribute('translate', 'no');
+      separator.innerText = "➔";
+
+      const transPart = document.createElement('span');
+      transPart.className = "text-blue-800 tracking-wide font-semibold";
+      transPart.innerText = tag.cleanWord;
+
+      contentContainer.appendChild(rawPart);
+      contentContainer.appendChild(separator);
+      contentContainer.appendChild(transPart);
+      tagDiv.appendChild(contentContainer);
+
+      if (tag.weight) {
+        const badge = document.createElement('span');
+        badge.className = "bg-blue-200/50 text-[10px] px-1.5 py-0.5 rounded-md text-blue-600 font-mono scale-90";
+        badge.innerText = `x${tag.weight}`;
+        tagDiv.appendChild(badge);
+      }
+
+      if (tag.isHidden) {
+        const hideBadge = document.createElement('span');
+        hideBadge.className = "bg-gray-300/60 text-[10px] px-1.5 py-0.5 rounded-md text-gray-500 scale-90";
+        hideBadge.innerText = '隱藏';
+        tagDiv.appendChild(hideBadge);
+      }
+
+      tagDiv.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showContextMenu(tag, tagDiv);
+      });
+
+      // 拖曳功能 (僅在通常模式下啟動，對 activePromptId 的陣列作排序)
+      if (!isCategorizationMode && currentListArray) {
+        tagDiv.draggable = true;
+        
+        tagDiv.addEventListener('dragstart', (e) => {
+          draggedTagId = tag.id;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', tag.id);
+          setTimeout(() => tagDiv.classList.add('dragging'), 0);
+        });
+
+        tagDiv.addEventListener('dragend', () => {
+          draggedTagId = null;
+          tagDiv.classList.remove('dragging');
+          document.querySelectorAll('.glass-tag').forEach(el => el.classList.remove('drag-over'));
+        });
+
+        tagDiv.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (draggedTagId && draggedTagId !== tag.id) tagDiv.classList.add('drag-over');
+        });
+
+        tagDiv.addEventListener('dragleave', () => tagDiv.classList.remove('drag-over'));
+
+        tagDiv.addEventListener('drop', (e) => {
+          e.preventDefault();
+          tagDiv.classList.remove('drag-over');
+          const droppedId = e.dataTransfer.getData('text/plain');
+          if (droppedId && droppedId !== tag.id) {
+            const fromIndex = currentListArray.findIndex(t => t.id === droppedId);
+            const toIndex = currentListArray.findIndex(t => t.id === tag.id);
+            if (fromIndex > -1 && toIndex > -1) {
+              const [movedItem] = currentListArray.splice(fromIndex, 1);
+              currentListArray.splice(toIndex, 0, movedItem);
+              renderTags();
+              updateRawInput(); 
+            }
+          }
+        });
+      }
+
+      return tagDiv;
+    }
+
+    function renderTags() {
+      tagsContainer.innerHTML = '';
+      const allCats = getAllCategories();
+      
+      // 判定盤面是否為空
+      let isEmpty = true;
+      if (!isCategorizationMode) {
+        const activeP = prompts.find(p => p.id === activePromptId);
+        if (activeP && activeP.tags.length > 0) isEmpty = false;
+      } else {
+        for(let cat of allCats) {
+          const pid = categorySlots[cat] || activePromptId;
+          const p = prompts.find(prompt => prompt.id === pid);
+          if(p && p.tags.some(t => t.category === cat)) { isEmpty = false; break; }
+        }
+      }
+
+      if (isEmpty) {
+        emptyState.classList.remove('hidden');
+        tagsContainer.appendChild(emptyState);
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      // 狀況 A：通常模式 (顯示單一 Active 槽位的內容)
+      if (!isCategorizationMode) {
+        tagsContainer.className = "flex flex-wrap gap-4 items-center content-start min-h-[30vh] w-full animate-scale-in";
+        const activeP = prompts.find(p => p.id === activePromptId);
+        if(activeP) {
+          activeP.tags.forEach(tag => tagsContainer.appendChild(createTagCardElement(tag, activeP.tags)));
+        }
+        return;
+      }
+
+      // 狀況 B：分類轉盤模式 (多槽混搭)
+      tagsContainer.className = "flex flex-col gap-6 w-full animate-scale-in";
+      initCheckedCategories(allCats); 
+
+      allCats.forEach(cat => {
+        const pid = categorySlots[cat] || activePromptId;
+        const p = prompts.find(prompt => prompt.id === pid);
+        const catTags = p ? p.tags.filter(t => t.category === cat) : [];
+        
+        const blockDiv = document.createElement('div');
+        blockDiv.className = "w-full bg-white/40 p-5 rounded-2xl border border-slate-200/40 relative";
+
+        const headerDiv = document.createElement('div');
+        headerDiv.className = "flex items-center justify-between flex-wrap gap-3 mb-4 pb-2 border-b border-slate-100/60";
+
+        const leftPart = document.createElement('div');
+        leftPart.className = "flex items-center gap-2.5";
+
+        const checkbox = document.createElement('input');
+        checkbox.type = "checkbox";
+        checkbox.checked = checkedCategories[cat] !== false;
+        checkbox.className = "w-4.5 h-4.5 rounded text-indigo-600 focus:ring-indigo-400 border-slate-300 accent-indigo-600 cursor-pointer transform scale-105";
+        checkbox.addEventListener('change', (e) => checkedCategories[cat] = e.target.checked);
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = "text-sm font-black text-slate-700 flex items-center gap-1.5";
+        
+        let dotColor = "bg-slate-500";
+        if (cat === '角色主體' || cat.includes('角色') || cat.includes('Subject')) dotColor = "bg-rose-500";
+        else if (cat === '服裝物品') dotColor = "bg-blue-500";
+        else if (cat === '動作表達') dotColor = "bg-emerald-500";
+        else if (cat === '背景環境') dotColor = "bg-amber-500";
+        else if (cat === '風格藝術') dotColor = "bg-purple-500";
+
+        labelSpan.innerHTML = `<span class="w-2.5 h-2.5 rounded-full ${dotColor}"></span> ${cat}`;
+
+        leftPart.appendChild(checkbox);
+        leftPart.appendChild(labelSpan);
+
+        // --- 核心轉盤 Switcher ---
+        const slotContainer = document.createElement('div');
+        slotContainer.className = 'flex bg-slate-100/80 border border-slate-200 rounded-lg p-0.5 ml-auto mr-4';
+        prompts.forEach(promptOpt => {
+            const btn = document.createElement('button');
+            btn.className = `px-2.5 py-0.5 text-xs font-bold rounded-md transition-all ${promptOpt.id === pid ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-slate-600'}`;
+            btn.innerText = promptOpt.name;
+            btn.title = `切換為 Prompt ( ${promptOpt.name} )`;
+            btn.onclick = () => {
+                categorySlots[cat] = promptOpt.id;
+                renderTags();
+            };
+            slotContainer.appendChild(btn);
+        });
+
+        const rightPart = document.createElement('div');
+        rightPart.className = "flex items-center gap-2";
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = "px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 font-bold transition-all text-xs flex items-center gap-1 shadow-sm";
+        copyBtn.innerHTML = `<i class="fa-solid fa-copy text-slate-400"></i> 複製`;
+        copyBtn.addEventListener('click', () => copySingleCategory(cat));
+
+        const hideBtn = document.createElement('button');
+        const isAllHidden = catTags.length > 0 && catTags.every(t => t.isHidden);
+        hideBtn.className = `px-3 py-1 rounded-lg border font-bold transition-all text-xs flex items-center gap-1 shadow-sm ${isAllHidden ? 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`;
+        hideBtn.innerHTML = `<i class="fa-solid ${isAllHidden ? 'fa-eye text-indigo-500' : 'fa-eye-slash text-slate-400'}"></i> ${isAllHidden ? '顯示全部' : '一鍵隱藏'}`;
+        hideBtn.addEventListener('click', () => toggleHideCategory(cat, !isAllHidden));
+
+        rightPart.appendChild(copyBtn);
+        rightPart.appendChild(hideBtn);
+
+        headerDiv.appendChild(leftPart);
+        headerDiv.appendChild(slotContainer);
+        headerDiv.appendChild(rightPart);
+        blockDiv.appendChild(headerDiv);
+
+        const gridDiv = document.createElement('div');
+        gridDiv.className = "flex flex-wrap gap-3 items-center min-h-[40px]";
+
+        if (catTags.length === 0) {
+          const emptySpan = document.createElement('span');
+          emptySpan.className = "text-xs text-slate-400 italic pl-1";
+          emptySpan.innerText = "暫無此類標籤";
+          gridDiv.appendChild(emptySpan);
+        } else {
+          catTags.forEach(tag => gridDiv.appendChild(createTagCardElement(tag, null)));
+        }
+
+        blockDiv.appendChild(gridDiv);
+        tagsContainer.appendChild(blockDiv);
+      });
+    }
+
+    // 分類圖例動態繪製
+    function renderCategoryLegends() {
+      categoryLegendContainer.innerHTML = '';
+      const allCats = getAllCategories();
+      const colorMapping = {
+        '角色主體': { bg: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-500' },
+        '服裝物品': { bg: 'bg-blue-50', text: 'text-blue-600', dot: 'bg-blue-500' },
+        '動作表達': { bg: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-500' },
+        '背景環境': { bg: 'bg-amber-50', text: 'text-amber-600', dot: 'bg-amber-500' },
+        '風格藝術': { bg: 'bg-purple-50', text: 'text-purple-600', dot: 'bg-purple-500' },
+        '雜代碼': { bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-500' }
+      };
+
+      allCats.forEach(cat => {
+        let colors = colorMapping[cat];
+        if (!colors) {
+          if (cat.includes('角色') || cat.includes('1') || cat.includes('2') || cat.includes('3')) {
+            colors = { bg: 'bg-rose-50/70', text: 'text-rose-600', dot: 'bg-rose-400' };
+          } else {
+            colors = { bg: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' };
+          }
+        }
+        const span = document.createElement('span');
+        span.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-md ${colors.bg} ${colors.text}`;
+        span.innerHTML = `<span class="w-2 h-2 rounded-full ${colors.dot}"></span> ${cat}`;
+        categoryLegendContainer.appendChild(span);
+      });
+    }
+
+    // -----------------------------------------
+    // 5. 提示詞庫功能 (載入、解析、與篩選過濾)
+    // -----------------------------------------
+    async function autoFetchGoogleSheet() {
+      const spreadsheetId = "1F2tBO9M7oPABvoL1ph0gKmmLfoyGGJh5JezubqG0TTc";
+      const gid = "0";
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(exportUrl)}`;
+
+      try {
+        let response;
+        try {
+          response = await fetch(exportUrl);
+          if (!response.ok) throw new Error('CORS');
+        } catch (e) {
+          response = await fetch(proxyUrl);
+        }
+
+        if (!response.ok) throw new Error('Sync failed.');
+        const csvText = await response.text();
+        parseCSV(csvText);
+
+        syncStatusBadge.className = "mt-3 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5";
+        statusSpinner.className = "fa-solid fa-cloud-arrow-down text-emerald-600";
+        statusText.innerText = `詞庫同步完成 (已同步 ${databaseTags.length} 筆)`;
+        
+        initDictionaryFilters();
+        
+        // 解析完成後對現有標籤補充分類
+        prompts.forEach(p => {
+          p.tags.forEach(tag => tag.category = predictCategory(tag.cleanWord));
+        });
+        renderTags();
+      } catch (error) {
+        console.error('Sheet fetch error:', error);
+        syncStatusBadge.className = "mt-3 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5";
+        statusSpinner.className = "fa-solid fa-triangle-exclamation text-rose-600 animate-pulse";
+        statusText.innerText = "詞庫離線模式";
+      }
+    }
+
+    function parseCSV(text) {
+      const lines = text.split('\n');
+      databaseTags = [];
+      lines.forEach((line, index) => {
+        if (index === 0) return;
+        const row = parseCSVRow(line);
+        if (row && row.length >= 7) {
+          const categoryA = row[0] ? row[0].trim() : ''; 
+          const subB = row[1] ? row[1].trim() : '';
+          const subC = row[2] ? row[2].trim() : '';
+          const subD = row[3] ? row[3].trim() : '';
+          const subCategories = [subB, subC, subD].filter(s => s && s !== '""' && s !== 'undefined');
+          const englishF = row[5] ? row[5].trim().replace(/^"|"$/g, '') : ''; 
+          const chineseG = row[6] ? row[6].trim().replace(/^"|"$/g, '') : ''; 
+
+          if (englishF) {
+            databaseTags.push({ category: categoryA, subB, subC, subD, subCategories, english: englishF, chinese: chineseG });
+          }
+        }
+      });
+    }
+
+    function parseCSVRow(text) {
+      let r = [], insideQuote = false, entry = "";
+      for (let i = 0; i < text.length; i++) {
+        let char = text.charAt(i);
+        if (char === '"') insideQuote = !insideQuote;
+        else if (char === ',' && !insideQuote) { r.push(entry); entry = ""; }
+        else entry += char;
+      }
+      r.push(entry); return r;
+    }
+
+    function initDictionaryFilters() {
+      const uniqueCats = [...new Set(databaseTags.map(t => normalizeCategoryName(t.category)).filter(Boolean))];
+      dictFilterCategory.innerHTML = '<option value="">-- 所有大分類 --</option>';
+      uniqueCats.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat; opt.innerText = cat;
+        dictFilterCategory.appendChild(opt);
+      });
+      updateDictionarySubFilters(); 
+      renderDictionaryList(); 
+    }
+
+    function updateDictionarySubFilters() {
+      const selectedCat = dictFilterCategory.value;
+      let validTags = databaseTags;
+      if (selectedCat) validTags = databaseTags.filter(t => normalizeCategoryName(t.category) === selectedCat);
+
+      // 無序且共用的聯集小分類篩選
+      let allSubCats = new Set();
+      validTags.forEach(t => {
+        if (t.subB) allSubCats.add(t.subB);
+        if (t.subC) allSubCats.add(t.subC);
+        if (t.subD) allSubCats.add(t.subD);
+      });
+      const uniqueSubCats = [...allSubCats].sort();
+
+      const val1 = dictFilterSub1.value; const val2 = dictFilterSub2.value; const val3 = dictFilterSub3.value;
+      populateSubFilter(dictFilterSub1, uniqueSubCats, "子分類 1");
+      populateSubFilter(dictFilterSub2, uniqueSubCats, "子分類 2");
+      populateSubFilter(dictFilterSub3, uniqueSubCats, "子分類 3");
+
+      if (uniqueSubCats.includes(val1)) dictFilterSub1.value = val1;
+      if (uniqueSubCats.includes(val2)) dictFilterSub2.value = val2;
+      if (uniqueSubCats.includes(val3)) dictFilterSub3.value = val3;
+    }
+
+    function populateSubFilter(selectElem, items, placeholder) {
+      selectElem.innerHTML = `<option value="">${placeholder}</option>`;
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item; opt.innerText = item;
+        selectElem.appendChild(opt);
+      });
+    }
+
+    function renderDictionaryList() {
+      const searchText = editTagWord.value.toLowerCase().trim();
+      const selCat = dictFilterCategory.value;
+      const sel1 = dictFilterSub1.value;
+      const sel2 = dictFilterSub2.value;
+      const sel3 = dictFilterSub3.value;
+
+      let filtered = databaseTags.filter(t => {
+        const matchText = !searchText || t.english.toLowerCase().includes(searchText) || (t.chinese && t.chinese.includes(searchText));
+        if (!matchText) return false;
+        
+        if (selCat && normalizeCategoryName(t.category) !== selCat) return false;
+        if (sel1 && !t.subCategories.includes(sel1)) return false;
+        if (sel2 && !t.subCategories.includes(sel2)) return false;
+        if (sel3 && !t.subCategories.includes(sel3)) return false;
+        
+        return true;
+      });
+
+      filtered = filtered.slice(0, 100);
+
+      dictResultsList.innerHTML = '';
+      if (filtered.length === 0) {
+        dictResultsList.innerHTML = `<div class="text-center text-slate-400 text-xs italic py-10">找不到符合的詞彙</div>`;
+        return;
+      }
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = "bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow transition-all group flex flex-col gap-1";
+        
+        div.addEventListener('click', () => {
+          editTagWord.value = item.english;
+          const normCat = normalizeCategoryName(item.category);
+          if (getAllCategories().includes(normCat)) {
+             editTagCategory.value = normCat;
+          }
+          updateLibraryInfoArea(item.english); 
+        });
+
+        const topRow = document.createElement('div');
+        topRow.className = "flex justify-between items-start";
+        topRow.innerHTML = `
+          <div class="flex flex-col">
+            <span class="font-bold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">${item.english}</span>
+            <span class="text-xs text-slate-500 font-medium">${item.chinese || ''}</span>
+          </div>
+        `;
+        
+        const tagRow = document.createElement('div');
+        tagRow.className = "flex flex-wrap gap-1 mt-0.5";
+        item.subCategories.forEach(sub => {
+          tagRow.innerHTML += `<span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded">${sub}</span>`;
+        });
+
+        div.appendChild(topRow);
+        div.appendChild(tagRow);
+        dictResultsList.appendChild(div);
+      });
+    }
+
+    dictFilterCategory.addEventListener('change', () => { updateDictionarySubFilters(); renderDictionaryList(); });
+    dictFilterSub1.addEventListener('change', renderDictionaryList);
+    dictFilterSub2.addEventListener('change', renderDictionaryList);
+    dictFilterSub3.addEventListener('change', renderDictionaryList);
+    editTagWord.addEventListener('input', () => { updateLibraryInfoArea(editTagWord.value.trim()); renderDictionaryList(); });
+
+
+    // -----------------------------------------
+    // 6. 編輯 / 新增標籤視窗邏輯
+    // -----------------------------------------
+
+    addNewTagBtn.addEventListener('click', () => {
+      activeTagId = null; 
+      editModalTitle.innerText = "新增自訂標籤";
+      editTagWord.value = "";
+      buildCategoryOptions('角色主體');
+      customCategoryDiv.classList.add('hidden');
+      updateLibraryInfoArea("");
+      setupWeightSection({leftBrackets: '', rightBrackets: '', weight: ''});
+      
+      editModal.classList.remove('hidden');
+      renderDictionaryList();
+    });
+
+    function openEditModal(tag) {
+      activeTagId = tag.id;
+      editModalTitle.innerText = "編輯標籤設定";
+      editTagWord.value = tag.cleanWord;
+      buildCategoryOptions(tag.category || '雜代碼');
+      customCategoryDiv.classList.add('hidden');
+      updateLibraryInfoArea(tag.cleanWord);
+      setupWeightSection(tag);
+      editModal.classList.remove('hidden');
+      renderDictionaryList();
+    }
+
+    function buildCategoryOptions(selectedValue) {
+      editTagCategory.innerHTML = '';
+      const allCats = getAllCategories();
+      allCats.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat; opt.innerText = cat;
+        if (cat === selectedValue) opt.selected = true;
+        editTagCategory.appendChild(opt);
+      });
+      const customOpt = document.createElement('option');
+      customOpt.value = '__custom__'; customOpt.className = "text-blue-600 font-bold";
+      customOpt.innerText = "+ 新增自訂分類...";
+      editTagCategory.appendChild(customOpt);
+    }
+
+    function updateLibraryInfoArea(wordText) {
+      editTagLibraryInfo.innerHTML = '';
+      const lower = wordText.toLowerCase();
+      if (!lower) {
+        editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-[11px] text-center py-2">請輸入單詞以匹配詞庫</div>`;
+        uploadNewTagBtn.classList.add('hidden');
+        return;
+      }
+
+      const match = databaseTags.find(item => item.english.toLowerCase() === lower);
+      if (match) {
+        uploadNewTagBtn.classList.add('hidden');
+        editTagLibraryInfo.innerHTML = `
+          <div class="flex items-center gap-1.5 text-slate-700 font-bold">
+            <i class="fa-solid fa-language text-blue-500"></i> 中文對照: <span class="text-blue-600 font-black">${match.chinese || '無'}</span>
+          </div>`;
+        if (match.subCategories.length > 0) {
+          const subDiv = document.createElement('div');
+          subDiv.className = "flex flex-wrap gap-1 mt-1.5 items-center text-slate-500 text-[10px]";
+          subDiv.innerHTML = `<span class="font-bold text-slate-400">小標籤: </span>`;
+          match.subCategories.forEach(sub => {
+            subDiv.innerHTML += `<span class="bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-600 font-semibold">${sub}</span>`;
+          });
+          editTagLibraryInfo.appendChild(subDiv);
+        } else {
+          editTagLibraryInfo.innerHTML += `<div class="text-[10px] text-slate-400 mt-1">無附加小標籤分類。</div>`;
+        }
+      } else {
+        uploadNewTagBtn.classList.remove('hidden');
+        const partialMatches = databaseTags.filter(item => item.english && lower.includes(item.english.toLowerCase()));
+        if (partialMatches.length > 0) {
+          editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-[11px]">未發現完整匹配，您可參考右側詞庫</div>`;
+        } else {
+          editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-center text-xs py-2">雲端詞庫中查無此標籤資料</div>`;
+        }
+      }
+    }
+
+    function setupWeightSection(tag) {
+      const currentBrackets = `${tag.leftBrackets || ''}${tag.rightBrackets || ''}`;
+      document.querySelectorAll('.bracket-btn').forEach(btn => {
+        if (btn.getAttribute('data-brackets') === currentBrackets) {
+          btn.className = "bracket-btn px-2.5 py-1 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all";
+        } else {
+          btn.className = "bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-semibold";
+        }
+      });
+      editTagWeightRange.value = tag.weight ? parseFloat(tag.weight) : 1.0;
+      editTagWeightInput.value = tag.weight || '';
+    }
+
+    confirmEditBtn.addEventListener('click', () => {
+      const editedText = editTagWord.value.trim();
+      if (!editedText) return showToast("單詞不可為空！", "error");
+
+      const newCat = editTagCategory.value;
+      const newWeightInput = editTagWeightInput.value.trim();
+      const newWeight = (newWeightInput && !isNaN(parseFloat(newWeightInput))) ? parseFloat(newWeightInput).toString() : '';
+
+      let lBrack = '', rBrack = '';
+      const activeBtn = document.querySelector('.bracket-btn.bg-blue-600');
+      if (activeBtn) {
+        const b = activeBtn.getAttribute('data-brackets');
+        if (b) { lBrack = b.substring(0, b.length/2); rBrack = b.substring(b.length/2); }
+      }
+
+      // 支援逗號拆分
+      const parsedTags = parsePrompt(editedText);
+      if (parsedTags.length === 0) return;
+
+      parsedTags[0].category = newCat;
+      parsedTags[0].weight = newWeight;
+      parsedTags[0].leftBrackets = lBrack;
+      parsedTags[0].rightBrackets = rBrack;
+      for(let i=1; i<parsedTags.length; i++) parsedTags[i].category = newCat; 
+
+      if (activeTagId) {
+        for(let p of prompts) {
+          let idx = p.tags.findIndex(t => t.id === activeTagId);
+          if(idx > -1) {
+            p.tags.splice(idx, 1, ...parsedTags);
+            break;
+          }
+        }
+        showToast(`已儲存標籤${parsedTags.length > 1 ? ' (自動拆分)' : ''}！`, 'success');
+      } else {
+        const p = prompts.find(pr => pr.id === activePromptId);
+        p.tags.push(...parsedTags);
+        showToast(`成功新增 ${parsedTags.length} 個標籤！`, 'success');
+      }
+
+      renderCategoryLegends(); // 防止新類別未上色
+      renderTags();
+      updateRawInput();
+      editModal.classList.add('hidden');
+    });
+
+    cancelEditBtn.addEventListener('click', () => editModal.classList.add('hidden'));
+
+    document.querySelectorAll('.bracket-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.bracket-btn').forEach(b => {
+          b.className = "bracket-btn px-2.5 py-1 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-all font-semibold";
+        });
+        btn.className = "bracket-btn px-2.5 py-1 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all";
+      });
+    });
+
+    editTagWeightRange.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value).toFixed(2);
+      editTagWeightInput.value = (parseFloat(val) === 1.0) ? '' : val;
+    });
+    editTagWeightInput.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val) && val >= 0.1 && val <= 2.0) editTagWeightRange.value = val;
+    });
+    clearWeightBtn.addEventListener('click', () => {
+      editTagWeightRange.value = 1.0; editTagWeightInput.value = '';
+    });
+
+    editTagCategory.addEventListener('change', (e) => {
+      if (e.target.value === '__custom__') {
+        customCategoryInput.value = "角色主體2";
+        customCategoryDiv.classList.remove('hidden');
+        customCategoryInput.focus(); customCategoryInput.select();
+      } else {
+        customCategoryDiv.classList.add('hidden');
+      }
+    });
+
+    btnConfirmCustomCat.addEventListener('click', () => {
+      const customValue = customCategoryInput.value.trim() || "角色主體2";
+      buildCategoryOptions(customValue);
+      renderCategoryLegends();
+      customCategoryDiv.classList.add('hidden');
+      showToast(`已套用自訂分類「${customValue}」！`, 'success');
+    });
+
+    btnCancelCustomCat.addEventListener('click', () => {
+      customCategoryDiv.classList.add('hidden');
+      const tag = getTagGlobally(activeTagId);
+      editTagCategory.value = tag ? (tag.category || '雜代碼') : '角色主體';
+    });
+
+    // -----------------------------------------
+    // 6.5 雲端上傳新詞彙邏輯
+    // -----------------------------------------
+    uploadNewTagBtn.addEventListener('click', () => {
+      const word = editTagWord.value.trim();
+      const cat = editTagCategory.value;
+      if (!word) return showToast('單詞不可為空', 'warning');
+      
+      // 取出真實的分類名 (防止傳送了 __custom__)
+      let actualCat = cat;
+      if (cat === '__custom__') actualCat = customCategoryInput.value.trim() || '角色主體2';
+
+      uploadDisplayEnglish.innerText = word;
+      uploadDisplayCategory.innerText = actualCat;
+      uploadInputChinese.value = ''; 
+      
+      uploadTagModal.classList.remove('hidden');
+    });
+
+    cancelUploadBtn.addEventListener('click', () => {
+      uploadTagModal.classList.add('hidden');
+    });
+
+    confirmUploadBtn.addEventListener('click', async () => {
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbyZU4rPf-gN6PXwViAR9x3u6ylf8Gn-Pw1KGi7A2NBBo7GKokfmUJmqnpIcQYTVIPf1oQ/exec";
+      
+      const payload = {
+          grandCategory: uploadDisplayCategory.innerText,
+          english: uploadDisplayEnglish.innerText,
+          chinese: uploadInputChinese.value.trim()
+      };
+
+      const origText = confirmUploadBtn.innerHTML;
+      confirmUploadBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 上傳中...`;
+      confirmUploadBtn.disabled = true;
+
+      try {
+          // 使用 no-cors 與 text/plain，完全避開跨網域預檢阻擋
+          await fetch(GAS_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify(payload)
+          });
+          
+          showToast(`已成功將「${payload.english}」發送至雲端待審區！`, 'success');
+          uploadTagModal.classList.add('hidden');
+      } catch (error) {
+          showToast(`上傳失敗：${error.message}`, 'error');
+      } finally {
+          confirmUploadBtn.innerHTML = origText;
+          confirmUploadBtn.disabled = false;
+      }
+    });
+
+    // -----------------------------------------
+    // 7. 全局其他事件與公用工具
+    // -----------------------------------------
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastIcon = document.getElementById('toastIcon');
+      const toastMsg = document.getElementById('toastMessage');
+
+      toastMsg.innerText = message;
+      if (type === 'success') toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+      else if (type === 'info') toastIcon.className = "fa-solid fa-circle-info text-blue-400 text-lg";
+      else if (type === 'warning') toastIcon.className = "fa-solid fa-circle-exclamation text-amber-400 text-lg";
+      else toastIcon.className = "fa-solid fa-circle-xmark text-rose-400 text-lg";
+
+      toast.classList.remove('hidden'); toast.classList.add('opacity-100');
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => { toast.classList.add('hidden'); toast.classList.remove('opacity-0'); }, 300);
+      }, 2500);
+    }
+
+    function showContextMenu(tag, element) {
+      activeTagId = tag.id;
+      menuTagTitle.innerText = `${tag.cleanWord}`;
+      if (tag.isHidden) {
+        hideMenuText.innerText = "顯示標籤"; hideMenuIcon.className = "fa-solid fa-eye text-slate-400 w-4";
+      } else {
+        hideMenuText.innerText = "隱藏標籤"; hideMenuIcon.className = "fa-solid fa-eye-slash text-slate-400 w-4";
+      }
+      const rect = element.getBoundingClientRect();
+      let left = rect.left + window.scrollX; let top = rect.bottom + window.scrollY + 6;
+      if (left + 192 > window.innerWidth) left = window.innerWidth - 192 - 16;
+
+      tagContextMenu.style.left = `${left}px`; tagContextMenu.style.top = `${top}px`;
+      tagContextMenu.classList.remove('hidden'); overlay.classList.remove('hidden');
+    }
+
+    function closeContextMenu() {
+      tagContextMenu.classList.add('hidden'); overlay.classList.add('hidden');
+    }
+
+    toggleModeBtn.addEventListener('click', () => {
+      isCategorizationMode = !isCategorizationMode;
+      if (isCategorizationMode) {
+        toggleModeBtn.className = "w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 transform hover:-translate-y-1 transition-all";
+        showToast('進入「分類轉盤模式」(混合多槽位)', 'info');
+      } else {
+        toggleModeBtn.className = "w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 transform hover:-translate-y-1 transition-all";
+        copySelectionMenu.classList.add('hidden');
+        showToast(`返回「通常模式」\n目前顯示槽位：( ${prompts.find(p=>p.id===activePromptId).name} )`, 'info');
+      }
+      renderTags();
+    });
+
+    toggleInputBtn.addEventListener('click', () => { inputDrawer.classList.remove('hidden'); updateRawInput(); rawPromptInput.focus(); });
+    closeDrawerBtn.addEventListener('click', () => inputDrawer.classList.add('hidden'));
+    cancelInputBtn.addEventListener('click', () => inputDrawer.classList.add('hidden'));
+    confirmInputBtn.addEventListener('click', () => {
+      const p = prompts.find(pr => pr.id === activePromptId);
+      p.tags = parsePrompt(rawPromptInput.value);
+      renderCategoryLegends(); renderTags(); inputDrawer.classList.add('hidden');
+      showToast(`載入 ${p.tags.length} 個標籤至槽位 ( ${p.name} )`, 'success');
+    });
+
+    overlay.addEventListener('click', () => { closeContextMenu(); copySelectionMenu.classList.add('hidden'); });
+
+    menuCopyBtn.addEventListener('click', () => {
+      const tag = getTagGlobally(activeTagId);
+      if (tag) {
+        let textToCopy = `${tag.leftBrackets}${tag.cleanWord}${tag.weight ? ':'+tag.weight : ''}${tag.rightBrackets}`;
+        copyTextToClipboard(textToCopy, `複製單詞: "${textToCopy}"`);
+      }
+      closeContextMenu();
+    });
+
+    menuHideBtn.addEventListener('click', () => {
+      const tag = getTagGlobally(activeTagId);
+      if (tag) {
+        tag.isHidden = !tag.isHidden;
+        showToast(tag.isHidden ? `已隱藏 "${tag.cleanWord}"` : `已還原 "${tag.cleanWord}"`, tag.isHidden ? 'warning' : 'info');
+        renderTags(); updateRawInput();
+      }
+      closeContextMenu();
+    });
+
+    menuDeleteBtn.addEventListener('click', () => {
+      removeTagGlobally(activeTagId);
+      renderCategoryLegends(); renderTags(); updateRawInput();
+      showToast('標籤已移除！', 'info');
+      closeContextMenu();
+    });
+
+    menuEditBtn.addEventListener('click', () => {
+      const tag = getTagGlobally(activeTagId);
+      if (tag) openEditModal(tag);
+      closeContextMenu();
+    });
+
+    // --- 複製全區邏輯 ---
+    quickCopyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isCategorizationMode) {
+        const p = prompts.find(pr => pr.id === activePromptId);
+        if (p.tags.length === 0) return showToast('此槽位沒有可複製的標籤！', 'error');
+        copyTextToClipboard(generatePromptTextFor(activePromptId), `已複製槽位 ( ${p.name} ) Prompt！`);
+      } else {
+        copySelectionMenu.classList.toggle('hidden');
+      }
+    });
+
+    btnTraditionalCopy.addEventListener('click', () => {
+      const allCats = getAllCategories();
+      let result = [];
+      allCats.forEach(cat => {
+          const pid = categorySlots[cat] || activePromptId;
+          const p = prompts.find(pr => pr.id === pid);
+          if(p) {
+              const activeTags = p.tags.filter(t => t.category === cat && !t.isHidden);
+              result.push(...activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`));
+          }
+      });
+      if(result.length === 0) return showToast('無可用標籤！', 'error');
+      copyTextToClipboard(result.join(', '), '傳統混搭 Prompt 已複製！');
+      copySelectionMenu.classList.add('hidden');
+    });
+
+    btnCategorizedCopy.addEventListener('click', () => {
+      const selectedBlocks = [];
+      const allCats = getAllCategories();
+      initCheckedCategories(allCats);
+      allCats.forEach(cat => {
+        if (checkedCategories[cat] !== false) {
+          const pid = categorySlots[cat] || activePromptId;
+          const p = prompts.find(pr => pr.id === pid);
+          if(p) {
+            const activeTags = p.tags.filter(t => t.category === cat && !t.isHidden);
+            if (activeTags.length > 0) {
+              const header = `[${getEnglishCategoryHeader(cat)}]`;
+              const promptString = activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
+              selectedBlocks.push(`${header}\n${promptString}`);
+            }
+          }
+        }
+      });
+      if (selectedBlocks.length === 0) return showToast('無勾選分類或標籤！', 'warning');
+      copyTextToClipboard(selectedBlocks.join('\n\n'), '分類排版 Prompt 已複製！');
+      copySelectionMenu.classList.add('hidden');
+    });
+
+    function copyTextToClipboard(text, successMsg) {
+      const el = document.createElement('textarea'); el.value = text;
+      document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+      showToast(successMsg, 'success');
+    }
+
+    function copySingleCategory(catName) {
+      const pid = categorySlots[catName] || activePromptId;
+      const p = prompts.find(pr => pr.id === pid);
+      if(!p) return;
+      const activeTags = p.tags.filter(t => t.category === catName && !t.isHidden);
+      if (activeTags.length === 0) return showToast('此槽位的分類無標籤', 'warning');
+      const compiled = activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
+      copyTextToClipboard(compiled, `已複製「${catName}」區標籤`);
+    }
+
+    function toggleHideCategory(catName, shouldHide) {
+      const pid = categorySlots[catName] || activePromptId;
+      const p = prompts.find(pr => pr.id === pid);
+      if(p) { p.tags.forEach(t => { if (t.category === catName) t.isHidden = shouldHide; }); }
+      renderTags(); updateRawInput();
+      showToast(shouldHide ? `已隱藏「${catName}」全部標籤！` : `已還原「${catName}」！`, 'info');
+    }
+
+    function getEnglishCategoryHeader(catName) {
+      const mapping = { '角色主體': 'Subject', '服裝物品': 'Clothing', '動作表達': 'Action', '背景環境': 'Environment', '風格藝術': 'Style', '雜代碼': 'Misc' };
+      return mapping[catName] || catName;
+    }
+
+    quickPasteBtn.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            const newTags = parsePrompt(text);
+            if (newTags.length > 0) {
+              const p = prompts.find(pr => pr.id === activePromptId);
+              p.tags.push(...newTags);
+              renderCategoryLegends(); renderTags(); updateRawInput();
+              showToast(`成功追加 ${newTags.length} 個標籤！`, 'success');
+            } else showToast('剪貼簿無有效標籤！', 'warning');
+          } else showToast('剪貼簿無內容！', 'warning');
+        } else {
+          inputDrawer.classList.remove('hidden'); rawPromptInput.focus();
+        }
+      } catch (err) {
+        inputDrawer.classList.remove('hidden'); rawPromptInput.focus();
+      }
+    });
+
+    // --- 清除防呆勾選 Modal 邏輯 ---
+    quickClearBtn.addEventListener('click', () => {
+      const container = document.getElementById('clearPromptCheckboxes');
+      container.innerHTML = '';
+      prompts.forEach(p => {
+          const label = document.createElement('label');
+          label.className = "flex items-center gap-2 cursor-pointer p-2 hover:bg-slate-50 rounded-lg";
+          label.innerHTML = `<input type="checkbox" value="${p.id}" class="w-4 h-4 text-rose-500 rounded border-slate-300 focus:ring-rose-400" checked> <span class="text-sm font-bold text-slate-700">Prompt 槽位 ( ${p.name} )</span>`;
+          container.appendChild(label);
+      });
+      clearConfirmModal.classList.remove('hidden');
+    });
+
+    cancelClearBtn.addEventListener('click', () => clearConfirmModal.classList.add('hidden'));
+
+    confirmClearBtn.addEventListener('click', () => {
+      const selectedPids = Array.from(document.querySelectorAll('#clearPromptCheckboxes input:checked')).map(el => el.value);
+      prompts = prompts.filter(p => !selectedPids.includes(p.id));
+      
+      if (prompts.length === 0) {
+          prompts.push({ id: 'p1', name: '1', tags: [] });
+          promptCounter = 1;
+      }
+      
+      if (!prompts.find(p => p.id === activePromptId)) {
+          activePromptId = prompts[0].id;
+      }
+      
+      Object.keys(categorySlots).forEach(cat => {
+          if(!prompts.find(p => p.id === categorySlots[cat])) {
+              categorySlots[cat] = activePromptId;
+          }
+      });
+
+      renderTabs();
+      renderCategoryLegends();
+      renderTags();
+      updateRawInput();
+      clearConfirmModal.classList.add('hidden');
+      showToast('已清空所選的 Prompt 槽位！', 'info');
+    });
+
+    window.onload = function() {
+      renderCategoryLegends(); 
+      initCheckedCategories(getAllCategories());
+      const defaultPrompt = "masterpiece, 1girl, hat, skirt, darkskin:1.2, ((beach)), holding book";
+      prompts[0].tags = parsePrompt(defaultPrompt);
+      renderTabs();
+      renderTags(); updateRawInput();
+      autoFetchGoogleSheet();
+    }
+  </script>
+</body>
+</html>
