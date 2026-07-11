@@ -138,13 +138,23 @@
       
       <textarea id="rawPromptInput" class="w-full h-80 p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none resize-none monospace text-sm md:text-base leading-relaxed text-slate-700 bg-slate-50/50" placeholder="例如：masterpiece, 1girl, hat..."></textarea>
       
-      <div class="flex justify-end gap-3 mt-6">
-        <button id="cancelInputBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100 font-medium transition-all text-sm">
-          取消
-        </button>
-        <button id="confirmInputBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center gap-2">
-          確認載入 <i class="fa-solid fa-check"></i>
-        </button>
+      <div class="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t border-slate-100">
+        <div class="flex gap-2 w-full md:w-auto">
+          <button id="exportCharBtn" class="flex-1 md:flex-none px-4 py-2 rounded-xl border border-blue-200 text-blue-600 hover:bg-blue-50 font-bold transition-all text-sm flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-box-archive"></i> 匯出角色
+          </button>
+          <button id="importCharBtn" class="flex-1 md:flex-none px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-all text-sm flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-cloud-arrow-down"></i> 匯入角色
+          </button>
+        </div>
+        <div class="flex gap-3 w-full md:w-auto justify-end">
+          <button id="cancelInputBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100 font-medium transition-all text-sm">
+            取消
+          </button>
+          <button id="confirmInputBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center gap-2">
+            確認載入 <i class="fa-solid fa-check"></i>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -265,17 +275,21 @@
         </div>
 
         <div class="flex justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 shrink-0">
-          <button id="cancelEditBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-all">取消</button>
-          <button id="confirmEditBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all shadow-lg shadow-blue-500/10">確認儲存</button>
-        </div>
+        <button id="cancelEditBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-all">取消</button>
+        <button id="confirmEditBtn" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all shadow-lg shadow-blue-500/10">確認儲存</button>
       </div>
+    </div>
 
-      <!-- 右側面板：動態提示詞庫 -->
-      <div class="w-full md:w-[55%] bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 p-5 md:p-6 flex flex-col overflow-hidden relative">
-        <h4 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2 shrink-0">
+    <!-- 右側面板：動態提示詞庫 -->
+    <div class="w-full md:w-[55%] bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 p-5 md:p-6 flex flex-col overflow-hidden relative">
+      <div class="flex justify-between items-center shrink-0 cursor-pointer md:cursor-auto" id="dictHeader">
+        <h4 class="text-lg font-bold text-slate-700 flex items-center gap-2">
           <i class="fa-solid fa-book-open text-indigo-500"></i> 提示詞庫匹配
         </h4>
-        
+        <i class="fa-solid fa-chevron-down md:hidden text-slate-500 transition-transform duration-300" id="toggleDictIcon"></i>
+      </div>
+      
+      <div id="dictBody" class="hidden md:flex flex-col flex-1 overflow-hidden pt-3">
         <div class="flex flex-col gap-2 mb-3 shrink-0">
           <select id="dictFilterCategory" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all">
             <option value="">-- 所有大分類 --</option>
@@ -293,8 +307,9 @@
       </div>
     </div>
   </div>
+</div>
 
-  <!-- 勾選式清除確認 Modal -->
+<!-- 勾選式清除確認 Modal -->
   <div id="clearConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
     <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-6 animate-scale-in text-center flex flex-col max-h-[80vh]">
       <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 shrink-0">
@@ -385,6 +400,46 @@
     </div>
   </div>
 
+  <!-- 匯出角色 Modal -->
+  <div id="exportCharModal" class="hidden fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 p-6 animate-scale-in flex flex-col">
+      <h4 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-box-archive text-indigo-500"></i> 匯出至角色庫
+      </h4>
+      <p class="text-xs text-slate-500 mb-4">將目前的 Prompt 打包上傳至雲端角色庫「待審」區。</p>
+      
+      <div class="space-y-3 mb-6">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">角色名稱</label>
+          <input type="text" id="exportCharName" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none text-sm font-bold text-slate-700" placeholder="例如：芙莉蓮">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">來源作品</label>
+          <input type="text" id="exportCharWork" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none text-sm font-semibold text-slate-700" placeholder="例如：葬送的芙莉蓮">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
+            <a href="https://urusai.cc/" target="_blank" rel="noopener noreferrer" class="hover:text-indigo-500 hover:underline flex items-center gap-1 transition-colors" title="前往圖床網站">
+              參考圖片網址 <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </label>
+          <input type="text" id="exportCharImageUrl" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none text-sm text-slate-700" placeholder="圖床網址，例如：https://i.urusai.cc/...">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">角色 PROMPT (唯讀預覽)</label>
+          <textarea id="exportCharPromptPreview" class="w-full h-24 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-500 outline-none resize-none" readonly></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2.5 shrink-0">
+        <button id="cancelExportCharBtn" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-all">取消</button>
+        <button id="confirmExportCharBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-1.5">
+          <i class="fa-solid fa-paper-plane"></i> 確認上傳
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="overlay" class="hidden fixed inset-0 z-30" style="background: transparent;"></div>
 
   <!-- 核心邏輯 -->
@@ -453,17 +508,20 @@
     const editTagWeightRange = document.getElementById('editTagWeightRange');
     const editTagWeightInput = document.getElementById('editTagWeightInput');
     const clearWeightBtn = document.getElementById('clearWeightBtn');
-    const confirmEditBtn = document.getElementById('confirmEditBtn');
-    const cancelEditBtn = document.getElementById('cancelEditBtn');
-    const uploadNewTagBtn = document.getElementById('uploadNewTagBtn');
+  const confirmEditBtn = document.getElementById('confirmEditBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const uploadNewTagBtn = document.getElementById('uploadNewTagBtn');
 
-    const dictFilterCategory = document.getElementById('dictFilterCategory');
-    const dictFilterSub1 = document.getElementById('dictFilterSub1');
-    const dictFilterSub2 = document.getElementById('dictFilterSub2');
-    const dictFilterSub3 = document.getElementById('dictFilterSub3');
-    const dictResultsList = document.getElementById('dictResultsList');
+  const dictFilterCategory = document.getElementById('dictFilterCategory');
+  const dictFilterSub1 = document.getElementById('dictFilterSub1');
+  const dictFilterSub2 = document.getElementById('dictFilterSub2');
+  const dictFilterSub3 = document.getElementById('dictFilterSub3');
+  const dictResultsList = document.getElementById('dictResultsList');
+  const dictHeader = document.getElementById('dictHeader');
+  const dictBody = document.getElementById('dictBody');
+  const toggleDictIcon = document.getElementById('toggleDictIcon');
 
-    const customCategoryDiv = document.getElementById('customCategoryDiv');
+  const customCategoryDiv = document.getElementById('customCategoryDiv');
     const customCategoryInput = document.getElementById('customCategoryInput');
     const btnConfirmCustomCat = document.getElementById('btnConfirmCustomCat');
     const btnCancelCustomCat = document.getElementById('btnCancelCustomCat');
@@ -483,6 +541,17 @@
     const uploadInputChinese = document.getElementById('uploadInputChinese');
     const cancelUploadBtn = document.getElementById('cancelUploadBtn');
     const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+
+    // 角色庫匯出匯入 DOM
+    const exportCharBtn = document.getElementById('exportCharBtn');
+    const importCharBtn = document.getElementById('importCharBtn');
+    const exportCharModal = document.getElementById('exportCharModal');
+    const exportCharName = document.getElementById('exportCharName');
+    const exportCharWork = document.getElementById('exportCharWork');
+    const exportCharImageUrl = document.getElementById('exportCharImageUrl');
+    const exportCharPromptPreview = document.getElementById('exportCharPromptPreview');
+    const cancelExportCharBtn = document.getElementById('cancelExportCharBtn');
+    const confirmExportCharBtn = document.getElementById('confirmExportCharBtn');
 
     // -----------------------------------------
     // 3. 基礎工具與跨槽位全域解析
@@ -1070,7 +1139,9 @@
 
       filtered.forEach(item => {
         const div = document.createElement('div');
-        div.className = "bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow transition-all group flex flex-col gap-1";
+        // 添加 notranslate 與 translate="no" 屬性防止整塊卡片被 Google 強制翻譯
+        div.className = "notranslate bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow transition-all group flex flex-col gap-1";
+        div.setAttribute('translate', 'no');
         
         div.addEventListener('click', () => {
           editTagWord.value = item.english;
@@ -1103,14 +1174,22 @@
     }
 
     dictFilterCategory.addEventListener('change', () => { updateDictionarySubFilters(); renderDictionaryList(); });
-    dictFilterSub1.addEventListener('change', renderDictionaryList);
-    dictFilterSub2.addEventListener('change', renderDictionaryList);
-    dictFilterSub3.addEventListener('change', renderDictionaryList);
-    editTagWord.addEventListener('input', () => { updateLibraryInfoArea(editTagWord.value.trim()); renderDictionaryList(); });
+  dictFilterSub1.addEventListener('change', renderDictionaryList);
+  dictFilterSub2.addEventListener('change', renderDictionaryList);
+  dictFilterSub3.addEventListener('change', renderDictionaryList);
+  editTagWord.addEventListener('input', () => { updateLibraryInfoArea(editTagWord.value.trim()); renderDictionaryList(); });
 
+  // 手機版：點擊標題展開/收合詞庫
+  dictHeader.addEventListener('click', () => {
+    if (window.innerWidth < 768) {
+      dictBody.classList.toggle('hidden');
+      dictBody.classList.toggle('flex');
+      toggleDictIcon.classList.toggle('rotate-180');
+    }
+  });
 
-    // -----------------------------------------
-    // 6. 編輯 / 新增標籤視窗邏輯
+  // -----------------------------------------
+  // 6. 編輯 / 新增標籤視窗邏輯
     // -----------------------------------------
 
     addNewTagBtn.addEventListener('click', () => {
@@ -1350,6 +1429,108 @@
           confirmUploadBtn.innerHTML = origText;
           confirmUploadBtn.disabled = false;
       }
+    });
+
+    // -----------------------------------------
+    // 6.6 匯出角色庫與自動抓取解析邏輯
+    // -----------------------------------------
+    
+    // 智慧型角色名稱抓取正則工具
+    function extractCharacterInfo(promptText) {
+      let charName = "";
+      let workName = "";
+      const segments = promptText.split(',');
+      
+      for (let seg of segments) {
+        let cleanSeg = seg.trim();
+        
+        // 使用正則表達式尋找可能的分割點，支援 \(, /(, 或 空格+ (
+        const match = cleanSeg.match(/(?:\\\(|\/\(|\s\()/);
+
+        if (match) {
+            const splitIndex = match.index;
+            const matchLength = match[0].length;
+            
+            // 切分名稱與作品
+            charName = cleanSeg.substring(0, splitIndex).trim();
+            let afterParen = cleanSeg.substring(splitIndex + matchLength).trim();
+            
+            // 剝除可能殘留的結尾符號 \), /) 或 )
+            workName = afterParen.replace(/(?:\\\)|\/\)|\))/g, '').trim();
+            
+            // 如果提取出的角色名帶有括號起頭，進行剝離
+            charName = charName.replace(/^[\(\[\{]+/, '').replace(/[:0-9\.\)]+$/, '').trim();
+            
+            if (charName && workName) {
+                return { charName, workName };
+            }
+        }
+      }
+      return { charName: "", workName: "" };
+    }
+
+    // 點擊匯出按鈕：開啟選單 + 自動填入
+    exportCharBtn.addEventListener('click', () => {
+      const currentPrompt = rawPromptInput.value.trim();
+      if (!currentPrompt) {
+        return showToast('目前沒有 Prompt 可以匯出！', 'warning');
+      }
+
+      // 自動抓取角色名稱與作品
+      const extracted = extractCharacterInfo(currentPrompt);
+      
+      exportCharName.value = extracted.charName;
+      exportCharWork.value = extracted.workName;
+      exportCharImageUrl.value = '';
+      exportCharPromptPreview.value = currentPrompt;
+
+      exportCharModal.classList.remove('hidden');
+    });
+
+    cancelExportCharBtn.addEventListener('click', () => {
+      exportCharModal.classList.add('hidden');
+    });
+
+    confirmExportCharBtn.addEventListener('click', async () => {
+      const charName = exportCharName.value.trim();
+      const charWork = exportCharWork.value.trim();
+      
+      if (!charName) return showToast('角色名稱為必填項目！', 'error');
+
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbyZU4rPf-gN6PXwViAR9x3u6ylf8Gn-Pw1KGi7A2NBBo7GKokfmUJmqnpIcQYTVIPf1oQ/exec";
+      
+      const payload = {
+          type: "character", // 利用我們先前寫好的分流設定
+          name: charName,
+          work: charWork,
+          imageUrl: exportCharImageUrl.value.trim(),
+          prompt: exportCharPromptPreview.value.trim()
+      };
+
+      const origText = confirmExportCharBtn.innerHTML;
+      confirmExportCharBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 上傳中...`;
+      confirmExportCharBtn.disabled = true;
+
+      try {
+          await fetch(GAS_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify(payload)
+          });
+          
+          showToast(`已成功將角色「${charName}」打包送至雲端角色庫待審區！`, 'success');
+          exportCharModal.classList.add('hidden');
+      } catch (error) {
+          showToast(`上傳失敗：${error.message}`, 'error');
+      } finally {
+          confirmExportCharBtn.innerHTML = origText;
+          confirmExportCharBtn.disabled = false;
+      }
+    });
+
+    importCharBtn.addEventListener('click', () => {
+      showToast('匯入角色功能即將開放，敬請期待！', 'info');
     });
 
     // -----------------------------------------
