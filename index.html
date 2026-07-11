@@ -203,6 +203,11 @@
           <i class="fa-solid fa-eye-slash text-slate-400 w-4" id="hideMenuIcon"></i> <span id="hideMenuText">隱藏標籤</span>
         </button>
       </li>
+      <li>
+        <button id="menuPinBtn" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-amber-50 hover:text-amber-600 rounded-xl transition-all flex items-center gap-2.5">
+          <i class="fa-solid fa-thumbtack text-slate-400 w-4" id="pinMenuIcon"></i> <span id="pinMenuText">固定標籤</span>
+        </button>
+      </li>
       <li class="pt-1 border-t border-slate-50">
         <button id="menuDeleteBtn" class="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-xl transition-all flex items-center gap-2.5">
           <i class="fa-solid fa-trash-can text-rose-400 w-4"></i> 移除標籤
@@ -379,7 +384,8 @@
       <div class="space-y-3 mb-6">
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1">標籤單詞 (英文)</label>
-          <div id="uploadDisplayEnglish" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 font-semibold break-all"></div>
+          <!-- 修正 1：加上 notranslate 與 translate="no" 防止翻譯干擾上傳的單字 -->
+          <div id="uploadDisplayEnglish" class="notranslate px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 font-semibold break-all" translate="no"></div>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1">對應大分類</label>
@@ -435,6 +441,92 @@
         <button id="cancelExportCharBtn" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-all">取消</button>
         <button id="confirmExportCharBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-1.5">
           <i class="fa-solid fa-paper-plane"></i> 確認上傳
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 匯入角色 Modal (遊戲風選角介面) -->
+  <div id="importCharModal" class="hidden fixed inset-0 z-[75] flex items-center justify-center p-0 md:p-6 bg-slate-900/70 backdrop-blur-md transition-all">
+    <div class="bg-white md:rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col h-full md:h-[90vh] overflow-hidden animate-scale-in relative">
+      
+      <!-- 標題列 -->
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+        <h4 class="text-lg md:text-xl font-black text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-users text-indigo-500"></i> 角色庫載入
+        </h4>
+        <button id="closeImportCharBtn" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-500 transition-all">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- 工具列 (搜尋與模式) -->
+      <div class="px-6 py-3 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white shrink-0">
+         <!-- 搜尋 -->
+         <div class="relative w-full md:w-72">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+            <input type="text" id="importSearchInput" placeholder="搜尋角色名稱或作品..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+         </div>
+         <!-- 模式 -->
+         <div class="flex items-center gap-4 text-sm font-bold text-slate-600 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 w-full md:w-auto">
+            <span class="text-slate-400 text-[11px] uppercase tracking-wider">載入模式</span>
+            <label class="flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors">
+               <input type="radio" name="importMode" value="append" checked class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 accent-indigo-600"> 追加至末尾
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer hover:text-indigo-600 transition-colors">
+               <input type="radio" name="importMode" value="overwrite" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 accent-indigo-600"> 完全覆蓋
+            </label>
+         </div>
+      </div>
+
+      <!-- 內容主體 (左側預覽、右側列表) -->
+      <div class="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50/50 pb-16 md:pb-0">
+         
+         <!-- 左側大圖預覽區 -->
+         <div class="w-full md:w-1/2 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-200 relative shrink-0 md:shrink">
+            <div id="previewEmpty" class="text-slate-400 flex flex-col items-center gap-3">
+               <i class="fa-solid fa-user-astronaut text-5xl opacity-50"></i>
+               <p class="font-bold text-sm">請從右側列表選擇角色</p>
+            </div>
+            
+            <div id="previewContent" class="hidden flex-col items-center w-full h-full text-center">
+               <!-- 預覽圖框 -->
+               <div class="w-full h-40 md:h-72 bg-slate-200/50 rounded-2xl mb-4 overflow-hidden shadow-inner relative flex items-center justify-center">
+                  <img id="previewImage" src="" alt="角色預覽" class="max-w-full max-h-full object-contain drop-shadow-md hidden">
+                  <i id="previewNoImage" class="fa-solid fa-image text-slate-300 text-4xl hidden"></i>
+               </div>
+               
+               <h2 id="previewName" class="text-2xl font-black text-slate-800 mb-1">角色名</h2>
+               <p id="previewWork" class="text-sm font-bold text-indigo-500 mb-4 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">來源作品</p>
+               
+               <!-- Prompt 展示區 -->
+               <div class="w-full text-left bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex-1 overflow-y-auto custom-scrollbar min-h-[80px]">
+                  <p class="text-[11px] font-black text-slate-400 mb-1 tracking-wider uppercase">PROMPT 預覽</p>
+                  <p id="previewPrompt" class="text-xs md:text-sm font-mono text-slate-600 break-all leading-relaxed"></p>
+               </div>
+            </div>
+         </div>
+
+         <!-- 右側角色卡片列表區 -->
+         <div class="w-full md:w-1/2 p-4 md:p-6 overflow-y-auto custom-scrollbar relative flex-1" id="importCharList">
+            <!-- 載入中動畫 -->
+            <div id="importLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 backdrop-blur-sm z-10 hidden">
+               <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-500 mb-3"></i>
+               <p class="font-bold text-slate-600 text-sm">正在從試算表讀取角色庫...</p>
+            </div>
+            
+            <!-- 卡片網格 -->
+            <div id="charGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+               <!-- JS 動態產生 -->
+            </div>
+         </div>
+      </div>
+
+      <!-- 底部按鈕區 -->
+      <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-white shrink-0 absolute md:relative bottom-0 left-0 right-0 z-20">
+        <button id="cancelImportModalBtn" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-all text-sm">取消</button>
+        <button id="confirmImportModalBtn" disabled class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold transition-all shadow-lg shadow-indigo-500/20 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-download"></i> 確認匯入
         </button>
       </div>
     </div>
@@ -497,6 +589,9 @@
     const menuHideBtn = document.getElementById('menuHideBtn');
     const hideMenuIcon = document.getElementById('hideMenuIcon');
     const hideMenuText = document.getElementById('hideMenuText');
+    const menuPinBtn = document.getElementById('menuPinBtn');
+    const pinMenuIcon = document.getElementById('pinMenuIcon');
+    const pinMenuText = document.getElementById('pinMenuText');
     const menuDeleteBtn = document.getElementById('menuDeleteBtn');
     const overlay = document.getElementById('overlay');
 
@@ -552,6 +647,24 @@
     const exportCharPromptPreview = document.getElementById('exportCharPromptPreview');
     const cancelExportCharBtn = document.getElementById('cancelExportCharBtn');
     const confirmExportCharBtn = document.getElementById('confirmExportCharBtn');
+
+    // 角色庫匯入 DOM
+    const importCharModal = document.getElementById('importCharModal');
+    const closeImportCharBtn = document.getElementById('closeImportCharBtn');
+    const cancelImportModalBtn = document.getElementById('cancelImportModalBtn');
+    const confirmImportModalBtn = document.getElementById('confirmImportModalBtn');
+    const importSearchInput = document.getElementById('importSearchInput');
+    const importLoading = document.getElementById('importLoading');
+    const charGrid = document.getElementById('charGrid');
+    
+    // 預覽區 DOM
+    const previewEmpty = document.getElementById('previewEmpty');
+    const previewContent = document.getElementById('previewContent');
+    const previewImage = document.getElementById('previewImage');
+    const previewNoImage = document.getElementById('previewNoImage');
+    const previewName = document.getElementById('previewName');
+    const previewWork = document.getElementById('previewWork');
+    const previewPrompt = document.getElementById('previewPrompt');
 
     // -----------------------------------------
     // 3. 基礎工具與跨槽位全域解析
@@ -638,7 +751,8 @@
           rightBrackets: rightBrackets,
           weight: weight,
           category: category,
-          isHidden: false
+          isHidden: false,
+          isPinned: false
         });
       });
       return parsedTags;
@@ -680,7 +794,7 @@
       return '雜代碼';
     }
 
-    // 取得指定槽位的純字串
+    // 取得指定槽位的純字串 (通常模式用)
     function generatePromptTextFor(pid) {
       const p = prompts.find(pr => pr.id === pid);
       if(!p) return '';
@@ -742,7 +856,14 @@
       tagDiv.id = tag.id;
       
       const catClass = getCategoryBorderClass(tag.category);
-      tagDiv.className = `glass-tag px-4 py-2.5 rounded-full flex items-center gap-2 cursor-pointer select-none text-sm font-semibold transition-all shadow-sm ${catClass} ${tag.isHidden ? 'tag-hidden' : ''}`;
+      
+      // 處理被固定的標籤的特殊外觀
+      let extraClass = '';
+      if (tag.isPinned) {
+          extraClass = 'border-amber-300 bg-gradient-to-r from-blue-50 to-amber-50';
+      }
+
+      tagDiv.className = `glass-tag px-4 py-2.5 rounded-full flex items-center gap-2 cursor-pointer select-none text-sm font-semibold transition-all shadow-sm ${catClass} ${extraClass} ${tag.isHidden ? 'tag-hidden' : ''}`;
       
       const plusIcon = document.createElement('span');
       plusIcon.className = "text-blue-300 text-xs font-light mr-0.5";
@@ -769,6 +890,15 @@
       contentContainer.appendChild(rawPart);
       contentContainer.appendChild(separator);
       contentContainer.appendChild(transPart);
+      
+      // 固定標籤圖示
+      if (tag.isPinned) {
+          const pinBadge = document.createElement('span');
+          pinBadge.className = "ml-1.5 text-amber-500 text-[11px]";
+          pinBadge.innerHTML = '<i class="fa-solid fa-thumbtack transform -rotate-45 drop-shadow-sm"></i>';
+          contentContainer.appendChild(pinBadge);
+      }
+
       tagDiv.appendChild(contentContainer);
 
       if (tag.weight) {
@@ -790,8 +920,8 @@
         showContextMenu(tag, tagDiv);
       });
 
-      // 拖曳功能 (僅在通常模式下啟動，對 activePromptId 的陣列作排序)
-      if (!isCategorizationMode && currentListArray) {
+      // 拖曳功能 (僅在通常模式下啟動)
+      if (!isCategorizationMode) {
         tagDiv.draggable = true;
         
         tagDiv.addEventListener('dragstart', (e) => {
@@ -820,11 +950,23 @@
           tagDiv.classList.remove('drag-over');
           const droppedId = e.dataTransfer.getData('text/plain');
           if (droppedId && droppedId !== tag.id) {
-            const fromIndex = currentListArray.findIndex(t => t.id === droppedId);
-            const toIndex = currentListArray.findIndex(t => t.id === tag.id);
-            if (fromIndex > -1 && toIndex > -1) {
-              const [movedItem] = currentListArray.splice(fromIndex, 1);
-              currentListArray.splice(toIndex, 0, movedItem);
+            
+            // 全域搜尋拖曳來源與目標陣列 (相容跨陣列拖曳)
+            let sourceArray = null, fromIndex = -1;
+            prompts.forEach(p => {
+              let idx = p.tags.findIndex(t => t.id === droppedId);
+              if (idx > -1) { sourceArray = p.tags; fromIndex = idx; }
+            });
+
+            let targetArray = null, toIndex = -1;
+            prompts.forEach(p => {
+              let idx = p.tags.findIndex(t => t.id === tag.id);
+              if (idx > -1) { targetArray = p.tags; toIndex = idx; }
+            });
+
+            if (sourceArray && targetArray && fromIndex > -1 && toIndex > -1) {
+              const [movedItem] = sourceArray.splice(fromIndex, 1);
+              targetArray.splice(toIndex, 0, movedItem);
               renderTags();
               updateRawInput(); 
             }
@@ -848,7 +990,12 @@
         for(let cat of allCats) {
           const pid = categorySlots[cat] || activePromptId;
           const p = prompts.find(prompt => prompt.id === pid);
-          if(p && p.tags.some(t => t.category === cat)) { isEmpty = false; break; }
+          let pinnedTags = [];
+          prompts.forEach(pr => pinnedTags.push(...pr.tags.filter(t => t.category === cat && t.isPinned)));
+          let normalTags = p ? p.tags.filter(t => t.category === cat && !t.isPinned) : [];
+          if (pinnedTags.length > 0 || normalTags.length > 0) {
+            isEmpty = false; break;
+          }
         }
       }
 
@@ -869,14 +1016,25 @@
         return;
       }
 
-      // 狀況 B：分類轉盤模式 (多槽混搭)
+      // 狀況 B：分類轉盤模式 (多槽混搭 + 跨槽固定標籤)
       tagsContainer.className = "flex flex-col gap-6 w-full animate-scale-in";
       initCheckedCategories(allCats); 
 
       allCats.forEach(cat => {
         const pid = categorySlots[cat] || activePromptId;
         const p = prompts.find(prompt => prompt.id === pid);
-        const catTags = p ? p.tags.filter(t => t.category === cat) : [];
+        
+        // 抓取此分類下，分散在各個槽位中被「固定」的標籤
+        let pinnedTags = [];
+        prompts.forEach(pr => {
+            pinnedTags.push(...pr.tags.filter(t => t.category === cat && t.isPinned));
+        });
+        
+        // 抓取此分類下，目前選中槽位的普通標籤
+        let normalTags = p ? p.tags.filter(t => t.category === cat && !t.isPinned) : [];
+        
+        // 組合兩者進行顯示
+        const catTags = [...pinnedTags, ...normalTags];
         
         const blockDiv = document.createElement('div');
         blockDiv.className = "w-full bg-white/40 p-5 rounded-2xl border border-slate-200/40 relative";
@@ -1139,7 +1297,6 @@
 
       filtered.forEach(item => {
         const div = document.createElement('div');
-        // 添加 notranslate 與 translate="no" 屬性防止整塊卡片被 Google 強制翻譯
         div.className = "notranslate bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-300 hover:shadow transition-all group flex flex-col gap-1";
         div.setAttribute('translate', 'no');
         
@@ -1179,7 +1336,6 @@
   dictFilterSub3.addEventListener('change', renderDictionaryList);
   editTagWord.addEventListener('input', () => { updateLibraryInfoArea(editTagWord.value.trim()); renderDictionaryList(); });
 
-  // 手機版：點擊標題展開/收合詞庫
   dictHeader.addEventListener('click', () => {
     if (window.innerWidth < 768) {
       dictBody.classList.toggle('hidden');
@@ -1312,6 +1468,10 @@
         for(let p of prompts) {
           let idx = p.tags.findIndex(t => t.id === activeTagId);
           if(idx > -1) {
+            // 如果原本是固定的標籤，編輯後維持固定屬性
+            const wasPinned = p.tags[idx].isPinned;
+            parsedTags.forEach(t => t.isPinned = wasPinned);
+            
             p.tags.splice(idx, 1, ...parsedTags);
             break;
           }
@@ -1384,7 +1544,6 @@
       const cat = editTagCategory.value;
       if (!word) return showToast('單詞不可為空', 'warning');
       
-      // 取出真實的分類名 (防止傳送了 __custom__)
       let actualCat = cat;
       if (cat === '__custom__') actualCat = customCategoryInput.value.trim() || '角色主體2';
 
@@ -1413,7 +1572,6 @@
       confirmUploadBtn.disabled = true;
 
       try {
-          // 使用 no-cors 與 text/plain，完全避開跨網域預檢阻擋
           await fetch(GAS_URL, {
               method: "POST",
               mode: "no-cors",
@@ -1434,8 +1592,6 @@
     // -----------------------------------------
     // 6.6 匯出角色庫與自動抓取解析邏輯
     // -----------------------------------------
-    
-    // 智慧型角色名稱抓取正則工具
     function extractCharacterInfo(promptText) {
       let charName = "";
       let workName = "";
@@ -1444,21 +1600,17 @@
       for (let seg of segments) {
         let cleanSeg = seg.trim();
         
-        // 使用正則表達式尋找可能的分割點，支援 \(, /(, 或 空格+ (
         const match = cleanSeg.match(/(?:\\\(|\/\(|\s\()/);
 
         if (match) {
             const splitIndex = match.index;
             const matchLength = match[0].length;
             
-            // 切分名稱與作品
             charName = cleanSeg.substring(0, splitIndex).trim();
             let afterParen = cleanSeg.substring(splitIndex + matchLength).trim();
             
-            // 剝除可能殘留的結尾符號 \), /) 或 )
             workName = afterParen.replace(/(?:\\\)|\/\)|\))/g, '').trim();
             
-            // 如果提取出的角色名帶有括號起頭，進行剝離
             charName = charName.replace(/^[\(\[\{]+/, '').replace(/[:0-9\.\)]+$/, '').trim();
             
             if (charName && workName) {
@@ -1469,14 +1621,12 @@
       return { charName: "", workName: "" };
     }
 
-    // 點擊匯出按鈕：開啟選單 + 自動填入
     exportCharBtn.addEventListener('click', () => {
       const currentPrompt = rawPromptInput.value.trim();
       if (!currentPrompt) {
         return showToast('目前沒有 Prompt 可以匯出！', 'warning');
       }
 
-      // 自動抓取角色名稱與作品
       const extracted = extractCharacterInfo(currentPrompt);
       
       exportCharName.value = extracted.charName;
@@ -1500,7 +1650,7 @@
       const GAS_URL = "https://script.google.com/macros/s/AKfycbyZU4rPf-gN6PXwViAR9x3u6ylf8Gn-Pw1KGi7A2NBBo7GKokfmUJmqnpIcQYTVIPf1oQ/exec";
       
       const payload = {
-          type: "character", // 利用我們先前寫好的分流設定
+          type: "character", 
           name: charName,
           work: charWork,
           imageUrl: exportCharImageUrl.value.trim(),
@@ -1529,8 +1679,158 @@
       }
     });
 
-    importCharBtn.addEventListener('click', () => {
-      showToast('匯入角色功能即將開放，敬請期待！', 'info');
+    // -----------------------------------------
+    // 6.7 匯入角色庫 (讀取與渲染邏輯)
+    // -----------------------------------------
+    let charLibraryData = [];
+    let selectedCharData = null;
+
+    function fixImageUrl(url) {
+        if (!url) return "";
+        if (url.includes('i.urusai.cc')) {
+            const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+            const isImage = imageExtensions.some(ext => url.toLowerCase().endsWith(ext));
+            if (!isImage) {
+                return url.endsWith('/') ? url + 'jpg' : url + '.jpg';
+            }
+        }
+        return url;
+    }
+
+    async function fetchCharacterLibrary() {
+        if (charLibraryData.length > 0) return true;
+
+        importLoading.classList.remove('hidden');
+        charGrid.innerHTML = ''; 
+
+        try {
+            const GAS_URL = "https://script.google.com/macros/s/AKfycbyZU4rPf-gN6PXwViAR9x3u6ylf8Gn-Pw1KGi7A2NBBo7GKokfmUJmqnpIcQYTVIPf1oQ/exec";
+            const response = await fetch(GAS_URL);
+            
+            if (!response.ok) throw new Error("網路請求失敗");
+            
+            const data = await response.json();
+            charLibraryData = data.filter(item => item.name || item.work || item.prompt);
+            return true;
+        } catch (error) {
+            console.error(error);
+            showToast("角色庫載入失敗，請檢查網路或 GAS 設定", "error");
+            return false;
+        } finally {
+            importLoading.classList.add('hidden');
+        }
+    }
+
+    function renderCharacterGrid(searchTerm = "") {
+        charGrid.innerHTML = "";
+        
+        const filtered = charLibraryData.filter(char => {
+            const term = searchTerm.toLowerCase();
+            return (char.name && char.name.toLowerCase().includes(term)) ||
+                   (char.work && char.work.toLowerCase().includes(term));
+        });
+
+        if (filtered.length === 0) {
+            charGrid.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10 font-bold text-sm">找不到符合的角色</div>`;
+            return;
+        }
+
+        filtered.forEach(char => {
+            const card = document.createElement('div');
+            const isSelected = selectedCharData === char;
+            
+            card.className = `flex items-center gap-3 p-2.5 rounded-2xl border-2 cursor-pointer transition-all relative overflow-hidden ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md transform scale-[1.02]' : 'border-slate-100 bg-white hover:border-indigo-300 hover:shadow-sm hover:bg-slate-50'}`;
+            
+            const finalImgUrl = fixImageUrl(char.imageUrl);
+
+            card.innerHTML = `
+                <div class="w-16 h-16 rounded-xl bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50 relative z-10">
+                    ${finalImgUrl ? `<img src="${finalImgUrl}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-image text-slate-400 text-xl"></i>`}
+                    ${isSelected ? `<div class="absolute inset-0 bg-indigo-500/30 flex items-center justify-center backdrop-blur-[1px]"><i class="fa-solid fa-check text-white drop-shadow-md text-xl"></i></div>` : ''}
+                </div>
+                <div class="flex flex-col flex-1 min-w-0 z-10">
+                    <span class="font-black text-slate-800 text-sm truncate group-hover:text-indigo-600">${char.name || '未命名'}</span>
+                    <span class="font-bold text-slate-400 text-[11px] truncate mt-0.5">${char.work || '未知作品'}</span>
+                </div>
+            `;
+            
+            card.onclick = () => {
+                selectedCharData = char;
+                renderCharacterGrid(importSearchInput.value);
+                updatePreviewPanel();
+            };
+            
+            charGrid.appendChild(card);
+        });
+    }
+
+    function updatePreviewPanel() {
+        if (!selectedCharData) {
+            previewEmpty.classList.remove('hidden');
+            previewContent.classList.add('hidden');
+            previewContent.classList.remove('flex');
+            confirmImportModalBtn.disabled = true;
+            return;
+        }
+
+        previewEmpty.classList.add('hidden');
+        previewContent.classList.remove('hidden');
+        previewContent.classList.add('flex');
+        confirmImportModalBtn.disabled = false;
+
+        previewName.innerText = selectedCharData.name || '未命名';
+        previewWork.innerText = selectedCharData.work || '未知作品';
+        previewPrompt.innerText = selectedCharData.prompt || '無設定 PROMPT';
+        
+        const finalImgUrl = fixImageUrl(selectedCharData.imageUrl);
+        if (finalImgUrl) {
+            previewImage.src = finalImgUrl;
+            previewImage.classList.remove('hidden');
+            previewNoImage.classList.add('hidden');
+        } else {
+            previewImage.src = "";
+            previewImage.classList.add('hidden');
+            previewNoImage.classList.remove('hidden');
+        }
+    }
+
+    importCharBtn.addEventListener('click', async () => {
+        selectedCharData = null;
+        importSearchInput.value = "";
+        updatePreviewPanel();
+        importCharModal.classList.remove('hidden');
+        await fetchCharacterLibrary();
+        renderCharacterGrid();
+    });
+
+    closeImportCharBtn.addEventListener('click', () => importCharModal.classList.add('hidden'));
+    cancelImportModalBtn.addEventListener('click', () => importCharModal.classList.add('hidden'));
+
+    importSearchInput.addEventListener('input', (e) => {
+        renderCharacterGrid(e.target.value);
+    });
+
+    confirmImportModalBtn.addEventListener('click', () => {
+        if (!selectedCharData) return;
+        
+        const mode = document.querySelector('input[name="importMode"]:checked').value;
+        const currentPrompt = rawPromptInput.value.trim();
+        const charPrompt = selectedCharData.prompt || "";
+        
+        if (mode === 'overwrite') {
+            rawPromptInput.value = charPrompt;
+            showToast(`已覆蓋為「${selectedCharData.name}」的設定！`, 'success');
+        } else {
+            if (currentPrompt) {
+                const separator = currentPrompt.endsWith(',') ? ' ' : ', ';
+                rawPromptInput.value = currentPrompt + separator + charPrompt;
+            } else {
+                rawPromptInput.value = charPrompt;
+            }
+            showToast(`已將「${selectedCharData.name}」追加至結尾！`, 'success');
+        }
+        
+        importCharModal.classList.add('hidden');
     });
 
     // -----------------------------------------
@@ -1557,11 +1857,21 @@
     function showContextMenu(tag, element) {
       activeTagId = tag.id;
       menuTagTitle.innerText = `${tag.cleanWord}`;
+      
+      // 更新隱藏圖示
       if (tag.isHidden) {
         hideMenuText.innerText = "顯示標籤"; hideMenuIcon.className = "fa-solid fa-eye text-slate-400 w-4";
       } else {
         hideMenuText.innerText = "隱藏標籤"; hideMenuIcon.className = "fa-solid fa-eye-slash text-slate-400 w-4";
       }
+
+      // 更新固定標籤圖示
+      if (tag.isPinned) {
+        pinMenuText.innerText = "解除固定"; pinMenuIcon.className = "fa-solid fa-thumbtack text-amber-500 w-4 transform -rotate-45";
+      } else {
+        pinMenuText.innerText = "固定標籤"; pinMenuIcon.className = "fa-solid fa-thumbtack text-slate-400 w-4";
+      }
+
       const rect = element.getBoundingClientRect();
       let left = rect.left + window.scrollX; let top = rect.bottom + window.scrollY + 6;
       if (left + 192 > window.innerWidth) left = window.innerWidth - 192 - 16;
@@ -1592,7 +1902,16 @@
     cancelInputBtn.addEventListener('click', () => inputDrawer.classList.add('hidden'));
     confirmInputBtn.addEventListener('click', () => {
       const p = prompts.find(pr => pr.id === activePromptId);
+      
+      // 在覆蓋當前槽位標籤前，先備份「被固定」的標籤狀態
+      const oldPinnedMap = {};
+      p.tags.forEach(t => { if(t.isPinned) oldPinnedMap[t.cleanWord] = true; });
+
       p.tags = parsePrompt(rawPromptInput.value);
+      
+      // 將固定狀態繼承回新標籤
+      p.tags.forEach(t => { if(oldPinnedMap[t.cleanWord]) t.isPinned = true; });
+
       renderCategoryLegends(); renderTags(); inputDrawer.classList.add('hidden');
       showToast(`載入 ${p.tags.length} 個標籤至槽位 ( ${p.name} )`, 'success');
     });
@@ -1613,6 +1932,17 @@
       if (tag) {
         tag.isHidden = !tag.isHidden;
         showToast(tag.isHidden ? `已隱藏 "${tag.cleanWord}"` : `已還原 "${tag.cleanWord}"`, tag.isHidden ? 'warning' : 'info');
+        renderTags(); updateRawInput();
+      }
+      closeContextMenu();
+    });
+
+    // --- 固定標籤點擊事件 ---
+    menuPinBtn.addEventListener('click', () => {
+      const tag = getTagGlobally(activeTagId);
+      if (tag) {
+        tag.isPinned = !tag.isPinned;
+        showToast(tag.isPinned ? `已固定「${tag.cleanWord}」，轉盤切換時將保持存在！` : `已解除固定「${tag.cleanWord}」`, tag.isPinned ? 'success' : 'info');
         renderTags(); updateRawInput();
       }
       closeContextMenu();
@@ -1649,10 +1979,13 @@
       allCats.forEach(cat => {
           const pid = categorySlots[cat] || activePromptId;
           const p = prompts.find(pr => pr.id === pid);
-          if(p) {
-              const activeTags = p.tags.filter(t => t.category === cat && !t.isHidden);
-              result.push(...activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`));
-          }
+          
+          let pinnedTags = [];
+          prompts.forEach(pr => pinnedTags.push(...pr.tags.filter(t => t.category === cat && t.isPinned)));
+          let normalTags = p ? p.tags.filter(t => t.category === cat && !t.isPinned) : [];
+          
+          let activeTags = [...pinnedTags, ...normalTags].filter(t => !t.isHidden);
+          result.push(...activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`));
       });
       if(result.length === 0) return showToast('無可用標籤！', 'error');
       copyTextToClipboard(result.join(', '), '傳統混搭 Prompt 已複製！');
@@ -1667,13 +2000,17 @@
         if (checkedCategories[cat] !== false) {
           const pid = categorySlots[cat] || activePromptId;
           const p = prompts.find(pr => pr.id === pid);
-          if(p) {
-            const activeTags = p.tags.filter(t => t.category === cat && !t.isHidden);
-            if (activeTags.length > 0) {
-              const header = `[${getEnglishCategoryHeader(cat)}]`;
-              const promptString = activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
-              selectedBlocks.push(`${header}\n${promptString}`);
-            }
+          
+          let pinnedTags = [];
+          prompts.forEach(pr => pinnedTags.push(...pr.tags.filter(t => t.category === cat && t.isPinned)));
+          let normalTags = p ? p.tags.filter(t => t.category === cat && !t.isPinned) : [];
+          
+          const activeTags = [...pinnedTags, ...normalTags].filter(t => !t.isHidden);
+
+          if (activeTags.length > 0) {
+            const header = `[${getEnglishCategoryHeader(cat)}]`;
+            const promptString = activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
+            selectedBlocks.push(`${header}\n${promptString}`);
           }
         }
       });
@@ -1691,8 +2028,13 @@
     function copySingleCategory(catName) {
       const pid = categorySlots[catName] || activePromptId;
       const p = prompts.find(pr => pr.id === pid);
-      if(!p) return;
-      const activeTags = p.tags.filter(t => t.category === catName && !t.isHidden);
+      
+      let pinnedTags = [];
+      prompts.forEach(pr => pinnedTags.push(...pr.tags.filter(t => t.category === catName && t.isPinned)));
+      let normalTags = p ? p.tags.filter(t => t.category === catName && !t.isPinned) : [];
+      
+      const activeTags = [...pinnedTags, ...normalTags].filter(t => !t.isHidden);
+      
       if (activeTags.length === 0) return showToast('此槽位的分類無標籤', 'warning');
       const compiled = activeTags.map(t => `${t.leftBrackets}${t.cleanWord}${t.weight?':'+t.weight:''}${t.rightBrackets}`).join(', ');
       copyTextToClipboard(compiled, `已複製「${catName}」區標籤`);
@@ -1701,7 +2043,15 @@
     function toggleHideCategory(catName, shouldHide) {
       const pid = categorySlots[catName] || activePromptId;
       const p = prompts.find(pr => pr.id === pid);
-      if(p) { p.tags.forEach(t => { if (t.category === catName) t.isHidden = shouldHide; }); }
+      
+      // 隱藏選中槽位的一般標籤
+      if(p) { p.tags.forEach(t => { if (t.category === catName && !t.isPinned) t.isHidden = shouldHide; }); }
+      
+      // 全局隱藏被「固定」的標籤
+      prompts.forEach(pr => {
+         pr.tags.forEach(t => { if (t.category === catName && t.isPinned) t.isHidden = shouldHide; });
+      });
+      
       renderTags(); updateRawInput();
       showToast(shouldHide ? `已隱藏「${catName}」全部標籤！` : `已還原「${catName}」！`, 'info');
     }
