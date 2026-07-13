@@ -384,7 +384,6 @@
       <div class="space-y-3 mb-6">
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1">標籤單詞 (英文)</label>
-          <!-- 修正 1：加上 notranslate 與 translate="no" 防止翻譯干擾上傳的單字 -->
           <div id="uploadDisplayEnglish" class="notranslate px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 font-semibold break-all" translate="no"></div>
         </div>
         <div>
@@ -556,6 +555,16 @@
     let draggedTagId = null;
 
     const CATEGORY_PRIORITY = ['動作表達', '背景環境', '服裝物品', '角色主體', '風格藝術', '雜代碼'];
+    
+    // 定義要忽略的顏色與常見形容詞 (供模糊比對過濾使用，避免干擾主要名詞的比對)
+    const IGNORE_ADJECTIVES = [
+      'red', 'blue', 'green', 'yellow', 'black', 'white', 'purple', 'pink', 'orange', 'brown', 'grey', 'gray', 'blonde', 'silver', 'golden',
+      'light', 'dark', 'pale', 'deep', 'bright',
+      'big', 'small', 'large', 'huge', 'tiny', 'long', 'short', 'tall',
+      'thick', 'thin', 'wide', 'narrow',
+      'cute', 'beautiful', 'gorgeous', 'ugly',
+      'old', 'new', 'young'
+    ];
 
     // -----------------------------------------
     // 2. DOM 節點
@@ -666,6 +675,14 @@
     const previewWork = document.getElementById('previewWork');
     const previewPrompt = document.getElementById('previewPrompt');
 
+    // 全局點擊監聽 (處理特定選單點擊外部自動關閉)
+    document.addEventListener('click', (e) => {
+      // 點擊區域不在 copySelectionMenu 內，且不在觸發它的 quickCopyBtn 內時，關閉選單
+      if (!copySelectionMenu.contains(e.target) && !quickCopyBtn.contains(e.target)) {
+        copySelectionMenu.classList.add('hidden');
+      }
+    });
+
     // -----------------------------------------
     // 3. 基礎工具與跨槽位全域解析
     // -----------------------------------------
@@ -758,15 +775,51 @@
       return parsedTags;
     }
 
+    // ⭐ 升級版四大智慧分類預判邏輯
     function predictCategory(tagWord) {
-      const lowerWord = tagWord.toLowerCase();
+      // 處理底線，將 "_" 視同空格處理
+      let normalizedWord = tagWord.replace(/_/g, ' ').trim();
+      let lowerWord = normalizedWord.toLowerCase();
+
+      // 狀況 2: 角色名稱帶括號特徵 (如 Frieren\(... 或 Frieren/(... 或 空格(... )
+      const charMatch = normalizedWord.match(/(?:\\\(|\/\(|\s\()/);
+      if (charMatch && charMatch.index > 0) {
+         return '角色主體';
+      }
+
+      // 狀況 1: 完全符合
       const exactMatch = databaseTags.find(item => item.english.toLowerCase() === lowerWord);
       if (exactMatch && exactMatch.category) return normalizeCategoryName(exactMatch.category);
 
+      // 預處理：去除形容詞/顏色以利模糊比對 (過濾掉修飾詞)
+      let strippedWord = lowerWord;
+      IGNORE_ADJECTIVES.forEach(adj => {
+        // 利用單詞邊界比對，確保 "yellow" 不會誤刪 "yellowstone" 裡面的字根
+        const regex = new RegExp(`\\b${adj}\\b`, 'gi');
+        strippedWord = strippedWord.replace(regex, '').trim();
+      });
+      
+      // 避免把整個詞都刪光了，如果剝離後沒剩東西，就用原詞
+      if (!strippedWord) strippedWord = lowerWord;
+      
+      // 去除形容詞後，再試一次完全符合 (例如 yellow scarf 剝除 yellow 後去比對 scarf)
+      const strippedExactMatch = databaseTags.find(item => item.english.toLowerCase() === strippedWord);
+      if (strippedExactMatch && strippedExactMatch.category) return normalizeCategoryName(strippedExactMatch.category);
+
+      // 狀況 3 & 4: 部分模糊符合與優先級抉擇
       let matches = [];
       databaseTags.forEach(item => {
         const itemEng = item.english.toLowerCase();
-        if (itemEng && lowerWord.includes(itemEng)) matches.push(item);
+        if(!itemEng) return;
+        
+        // 確保以單詞邊界比對，避免 "car" 錯誤匹配到 "scarf" 裡面
+        // 跳脫資料庫單詞中的可能包含的特殊符號
+        const escapedItemEng = itemEng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(?:^|\\s|_|-)${escapedItemEng}(?:$|\\s|_|-)`, 'i');
+        
+        if (regex.test(strippedWord)) {
+            matches.push(item);
+        }
       });
 
       if (matches.length > 0) {
@@ -774,7 +827,8 @@
         for (let i = 0; i < CATEGORY_PRIORITY.length; i++) {
           const priorityCat = CATEGORY_PRIORITY[i];
           if (matches.some(m => normalizeCategoryName(m.category) === priorityCat)) {
-            chosenCategory = priorityCat; break;
+            chosenCategory = priorityCat; 
+            break;
           }
         }
         if (chosenCategory) return chosenCategory;
