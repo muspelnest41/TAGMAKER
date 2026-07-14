@@ -252,6 +252,7 @@
 
           <div>
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">3. 詞庫完整匹配 (唯讀)</label>
+            <!-- 在這裡動態載入完全匹配，或複合詞拆解分析 -->
             <div id="editTagLibraryInfo" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-500 flex flex-col gap-1 min-h-[60px] justify-start">
               <div class="text-slate-400 italic text-[11px] text-center py-2">請輸入單詞以匹配詞庫</div>
             </div>
@@ -552,6 +553,7 @@
     let isCategorizationMode = false;
     let checkedCategories = {}; 
     let defaultCategories = ['角色主體', '服裝物品', '動作表達', '背景環境', '風格藝術', '雜代碼'];
+    let userCategoryOrder = [...defaultCategories]; // 全域記錄使用者的分類排序
     let draggedTagId = null;
 
     const CATEGORY_PRIORITY = ['動作表達', '背景環境', '服裝物品', '角色主體', '風格藝術', '雜代碼'];
@@ -612,20 +614,20 @@
     const editTagWeightRange = document.getElementById('editTagWeightRange');
     const editTagWeightInput = document.getElementById('editTagWeightInput');
     const clearWeightBtn = document.getElementById('clearWeightBtn');
-  const confirmEditBtn = document.getElementById('confirmEditBtn');
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  const uploadNewTagBtn = document.getElementById('uploadNewTagBtn');
+    const confirmEditBtn = document.getElementById('confirmEditBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const uploadNewTagBtn = document.getElementById('uploadNewTagBtn');
 
-  const dictFilterCategory = document.getElementById('dictFilterCategory');
-  const dictFilterSub1 = document.getElementById('dictFilterSub1');
-  const dictFilterSub2 = document.getElementById('dictFilterSub2');
-  const dictFilterSub3 = document.getElementById('dictFilterSub3');
-  const dictResultsList = document.getElementById('dictResultsList');
-  const dictHeader = document.getElementById('dictHeader');
-  const dictBody = document.getElementById('dictBody');
-  const toggleDictIcon = document.getElementById('toggleDictIcon');
+    const dictFilterCategory = document.getElementById('dictFilterCategory');
+    const dictFilterSub1 = document.getElementById('dictFilterSub1');
+    const dictFilterSub2 = document.getElementById('dictFilterSub2');
+    const dictFilterSub3 = document.getElementById('dictFilterSub3');
+    const dictResultsList = document.getElementById('dictResultsList');
+    const dictHeader = document.getElementById('dictHeader');
+    const dictBody = document.getElementById('dictBody');
+    const toggleDictIcon = document.getElementById('toggleDictIcon');
 
-  const customCategoryDiv = document.getElementById('customCategoryDiv');
+    const customCategoryDiv = document.getElementById('customCategoryDiv');
     const customCategoryInput = document.getElementById('customCategoryInput');
     const btnConfirmCustomCat = document.getElementById('btnConfirmCustomCat');
     const btnCancelCustomCat = document.getElementById('btnCancelCustomCat');
@@ -675,23 +677,39 @@
     const previewWork = document.getElementById('previewWork');
     const previewPrompt = document.getElementById('previewPrompt');
 
-    // 全局點擊監聽 (處理特定選單點擊外部自動關閉)
-    document.addEventListener('click', (e) => {
-      // 點擊區域不在 copySelectionMenu 內，且不在觸發它的 quickCopyBtn 內時，關閉選單
-      if (!copySelectionMenu.contains(e.target) && !quickCopyBtn.contains(e.target)) {
-        copySelectionMenu.classList.add('hidden');
-      }
-    });
-
     // -----------------------------------------
     // 3. 基礎工具與跨槽位全域解析
     // -----------------------------------------
     
-    // 提取所有曾經出現的類別 (預設 + 各槽位有的自訂)
+    // 提取所有曾經出現的類別並維護全域順序
     function getAllCategories() {
-      let cats = new Set(defaultCategories);
-      prompts.forEach(p => p.tags.forEach(t => cats.add(t.category)));
-      return Array.from(cats);
+      let existingSet = new Set(userCategoryOrder);
+      let missingCats = [];
+      prompts.forEach(p => p.tags.forEach(t => {
+        if (!existingSet.has(t.category)) {
+          existingSet.add(t.category);
+          missingCats.push(t.category);
+        }
+      }));
+      if (missingCats.length > 0) {
+        userCategoryOrder.push(...missingCats);
+      }
+      return userCategoryOrder;
+    }
+
+    // 分類上下順序調整
+    function moveCategory(catName, direction) {
+        const index = userCategoryOrder.indexOf(catName);
+        if (index === -1) return;
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= userCategoryOrder.length) return;
+        
+        const temp = userCategoryOrder[index];
+        userCategoryOrder[index] = userCategoryOrder[newIndex];
+        userCategoryOrder[newIndex] = temp;
+        
+        renderTags();
+        renderCategoryLegends();
     }
 
     function initCheckedCategories(allCats) {
@@ -777,11 +795,10 @@
 
     // ⭐ 升級版四大智慧分類預判邏輯
     function predictCategory(tagWord) {
-      // 處理底線，將 "_" 視同空格處理
       let normalizedWord = tagWord.replace(/_/g, ' ').trim();
       let lowerWord = normalizedWord.toLowerCase();
 
-      // 狀況 2: 角色名稱帶括號特徵 (如 Frieren\(... 或 Frieren/(... 或 空格(... )
+      // 狀況 2: 角色名稱帶括號特徵
       const charMatch = normalizedWord.match(/(?:\\\(|\/\(|\s\()/);
       if (charMatch && charMatch.index > 0) {
          return '角色主體';
@@ -791,18 +808,15 @@
       const exactMatch = databaseTags.find(item => item.english.toLowerCase() === lowerWord);
       if (exactMatch && exactMatch.category) return normalizeCategoryName(exactMatch.category);
 
-      // 預處理：去除形容詞/顏色以利模糊比對 (過濾掉修飾詞)
+      // 預處理：去除形容詞/顏色
       let strippedWord = lowerWord;
       IGNORE_ADJECTIVES.forEach(adj => {
-        // 利用單詞邊界比對，確保 "yellow" 不會誤刪 "yellowstone" 裡面的字根
         const regex = new RegExp(`\\b${adj}\\b`, 'gi');
         strippedWord = strippedWord.replace(regex, '').trim();
       });
       
-      // 避免把整個詞都刪光了，如果剝離後沒剩東西，就用原詞
       if (!strippedWord) strippedWord = lowerWord;
       
-      // 去除形容詞後，再試一次完全符合 (例如 yellow scarf 剝除 yellow 後去比對 scarf)
       const strippedExactMatch = databaseTags.find(item => item.english.toLowerCase() === strippedWord);
       if (strippedExactMatch && strippedExactMatch.category) return normalizeCategoryName(strippedExactMatch.category);
 
@@ -812,8 +826,6 @@
         const itemEng = item.english.toLowerCase();
         if(!itemEng) return;
         
-        // 確保以單詞邊界比對，避免 "car" 錯誤匹配到 "scarf" 裡面
-        // 跳脫資料庫單詞中的可能包含的特殊符號
         const escapedItemEng = itemEng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`(?:^|\\s|_|-)${escapedItemEng}(?:$|\\s|_|-)`, 'i');
         
@@ -848,7 +860,6 @@
       return '雜代碼';
     }
 
-    // 取得指定槽位的純字串 (通常模式用)
     function generatePromptTextFor(pid) {
       const p = prompts.find(pr => pr.id === pid);
       if(!p) return '';
@@ -862,8 +873,6 @@
     // -----------------------------------------
     // 4. UI 卡片與轉盤渲染
     // -----------------------------------------
-    
-    // 繪製上方的 (1) (2) 槽位籤
     function renderTabs() {
       promptTabsContainer.innerHTML = '';
       prompts.forEach(p => {
@@ -877,7 +886,6 @@
 
     function selectTab(pid) {
       activePromptId = pid;
-      // "一鍵將下方的轉盤都切換到選項上" -> 點擊分頁等同於重置轉盤視角至該槽位
       const allCats = getAllCategories();
       allCats.forEach(cat => categorySlots[cat] = activePromptId);
       renderTabs();
@@ -885,7 +893,6 @@
       updateRawInput();
     }
 
-    // 新增槽位
     addPromptBtn.addEventListener('click', () => {
       promptCounter++;
       const newPid = 'p' + Math.random().toString(36).substr(2, 5);
@@ -911,7 +918,6 @@
       
       const catClass = getCategoryBorderClass(tag.category);
       
-      // 處理被固定的標籤的特殊外觀
       let extraClass = '';
       if (tag.isPinned) {
           extraClass = 'border-amber-300 bg-gradient-to-r from-blue-50 to-amber-50';
@@ -945,7 +951,6 @@
       contentContainer.appendChild(separator);
       contentContainer.appendChild(transPart);
       
-      // 固定標籤圖示
       if (tag.isPinned) {
           const pinBadge = document.createElement('span');
           pinBadge.className = "ml-1.5 text-amber-500 text-[11px]";
@@ -955,16 +960,28 @@
 
       tagDiv.appendChild(contentContainer);
 
+      // ✨ NEW: 添加未收錄提示 (NEW 徽章)
+      if (databaseTags.length > 0) {
+          const normalizedWordForNew = tag.cleanWord.replace(/_/g, ' ').toLowerCase();
+          const isExactMatch = databaseTags.some(item => item.english.toLowerCase() === normalizedWordForNew);
+          if (!isExactMatch) {
+              const newBadge = document.createElement('span');
+              newBadge.className = "bg-rose-100/80 text-[9px] px-1.5 py-0.5 rounded-md text-rose-600 font-black scale-90 tracking-wider ml-1";
+              newBadge.innerText = 'NEW';
+              tagDiv.appendChild(newBadge);
+          }
+      }
+
       if (tag.weight) {
         const badge = document.createElement('span');
-        badge.className = "bg-blue-200/50 text-[10px] px-1.5 py-0.5 rounded-md text-blue-600 font-mono scale-90";
+        badge.className = "bg-blue-200/50 text-[10px] px-1.5 py-0.5 rounded-md text-blue-600 font-mono scale-90 ml-1";
         badge.innerText = `x${tag.weight}`;
         tagDiv.appendChild(badge);
       }
 
       if (tag.isHidden) {
         const hideBadge = document.createElement('span');
-        hideBadge.className = "bg-gray-300/60 text-[10px] px-1.5 py-0.5 rounded-md text-gray-500 scale-90";
+        hideBadge.className = "bg-gray-300/60 text-[10px] px-1.5 py-0.5 rounded-md text-gray-500 scale-90 ml-1";
         hideBadge.innerText = '隱藏';
         tagDiv.appendChild(hideBadge);
       }
@@ -974,50 +991,40 @@
         showContextMenu(tag, tagDiv);
       });
 
-      // 拖曳功能 (僅在通常模式下啟動)
       if (!isCategorizationMode) {
         tagDiv.draggable = true;
-        
         tagDiv.addEventListener('dragstart', (e) => {
           draggedTagId = tag.id;
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', tag.id);
           setTimeout(() => tagDiv.classList.add('dragging'), 0);
         });
-
         tagDiv.addEventListener('dragend', () => {
           draggedTagId = null;
           tagDiv.classList.remove('dragging');
           document.querySelectorAll('.glass-tag').forEach(el => el.classList.remove('drag-over'));
         });
-
         tagDiv.addEventListener('dragover', (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'move';
           if (draggedTagId && draggedTagId !== tag.id) tagDiv.classList.add('drag-over');
         });
-
         tagDiv.addEventListener('dragleave', () => tagDiv.classList.remove('drag-over'));
-
         tagDiv.addEventListener('drop', (e) => {
           e.preventDefault();
           tagDiv.classList.remove('drag-over');
           const droppedId = e.dataTransfer.getData('text/plain');
           if (droppedId && droppedId !== tag.id) {
-            
-            // 全域搜尋拖曳來源與目標陣列 (相容跨陣列拖曳)
             let sourceArray = null, fromIndex = -1;
             prompts.forEach(p => {
               let idx = p.tags.findIndex(t => t.id === droppedId);
               if (idx > -1) { sourceArray = p.tags; fromIndex = idx; }
             });
-
             let targetArray = null, toIndex = -1;
             prompts.forEach(p => {
               let idx = p.tags.findIndex(t => t.id === tag.id);
               if (idx > -1) { targetArray = p.tags; toIndex = idx; }
             });
-
             if (sourceArray && targetArray && fromIndex > -1 && toIndex > -1) {
               const [movedItem] = sourceArray.splice(fromIndex, 1);
               targetArray.splice(toIndex, 0, movedItem);
@@ -1035,7 +1042,6 @@
       tagsContainer.innerHTML = '';
       const allCats = getAllCategories();
       
-      // 判定盤面是否為空
       let isEmpty = true;
       if (!isCategorizationMode) {
         const activeP = prompts.find(p => p.id === activePromptId);
@@ -1060,7 +1066,6 @@
       }
       emptyState.classList.add('hidden');
 
-      // 狀況 A：通常模式 (顯示單一 Active 槽位的內容)
       if (!isCategorizationMode) {
         tagsContainer.className = "flex flex-wrap gap-4 items-center content-start min-h-[30vh] w-full animate-scale-in";
         const activeP = prompts.find(p => p.id === activePromptId);
@@ -1070,7 +1075,6 @@
         return;
       }
 
-      // 狀況 B：分類轉盤模式 (多槽混搭 + 跨槽固定標籤)
       tagsContainer.className = "flex flex-col gap-6 w-full animate-scale-in";
       initCheckedCategories(allCats); 
 
@@ -1078,16 +1082,11 @@
         const pid = categorySlots[cat] || activePromptId;
         const p = prompts.find(prompt => prompt.id === pid);
         
-        // 抓取此分類下，分散在各個槽位中被「固定」的標籤
         let pinnedTags = [];
         prompts.forEach(pr => {
             pinnedTags.push(...pr.tags.filter(t => t.category === cat && t.isPinned));
         });
-        
-        // 抓取此分類下，目前選中槽位的普通標籤
         let normalTags = p ? p.tags.filter(t => t.category === cat && !t.isPinned) : [];
-        
-        // 組合兩者進行顯示
         const catTags = [...pinnedTags, ...normalTags];
         
         const blockDiv = document.createElement('div');
@@ -1098,6 +1097,24 @@
 
         const leftPart = document.createElement('div');
         leftPart.className = "flex items-center gap-2.5";
+
+        // ✨ NEW: 分類順序控制箭頭 (上/下)
+        const orderControls = document.createElement('div');
+        orderControls.className = "flex flex-col -space-y-1.5 mr-1";
+        
+        const upBtn = document.createElement('button');
+        upBtn.innerHTML = '<i class="fa-solid fa-caret-up"></i>';
+        upBtn.className = "text-slate-300 hover:text-indigo-600 text-lg leading-none outline-none focus:outline-none";
+        upBtn.onclick = () => moveCategory(cat, -1);
+        
+        const downBtn = document.createElement('button');
+        downBtn.innerHTML = '<i class="fa-solid fa-caret-down"></i>';
+        downBtn.className = "text-slate-300 hover:text-indigo-600 text-lg leading-none outline-none focus:outline-none";
+        downBtn.onclick = () => moveCategory(cat, 1);
+
+        orderControls.appendChild(upBtn);
+        orderControls.appendChild(downBtn);
+        leftPart.appendChild(orderControls);
 
         const checkbox = document.createElement('input');
         checkbox.type = "checkbox";
@@ -1120,7 +1137,6 @@
         leftPart.appendChild(checkbox);
         leftPart.appendChild(labelSpan);
 
-        // --- 核心轉盤 Switcher ---
         const slotContainer = document.createElement('div');
         slotContainer.className = 'flex bg-slate-100/80 border border-slate-200 rounded-lg p-0.5 ml-auto mr-4';
         prompts.forEach(promptOpt => {
@@ -1174,7 +1190,6 @@
       });
     }
 
-    // 分類圖例動態繪製
     function renderCategoryLegends() {
       categoryLegendContainer.innerHTML = '';
       const allCats = getAllCategories();
@@ -1231,7 +1246,6 @@
         
         initDictionaryFilters();
         
-        // 解析完成後對現有標籤補充分類
         prompts.forEach(p => {
           p.tags.forEach(tag => tag.category = predictCategory(tag.cleanWord));
         });
@@ -1294,7 +1308,6 @@
       let validTags = databaseTags;
       if (selectedCat) validTags = databaseTags.filter(t => normalizeCategoryName(t.category) === selectedCat);
 
-      // 無序且共用的聯集小分類篩選
       let allSubCats = new Set();
       validTags.forEach(t => {
         if (t.subB) allSubCats.add(t.subB);
@@ -1400,7 +1413,7 @@
 
   // -----------------------------------------
   // 6. 編輯 / 新增標籤視窗邏輯
-    // -----------------------------------------
+  // -----------------------------------------
 
     addNewTagBtn.addEventListener('click', () => {
       activeTagId = null; 
@@ -1442,41 +1455,121 @@
       editTagCategory.appendChild(customOpt);
     }
 
+    // ✨ NEW: 強化版 updateLibraryInfoArea (智慧拆解分析)
     function updateLibraryInfoArea(wordText) {
       editTagLibraryInfo.innerHTML = '';
-      const lower = wordText.toLowerCase();
+      const rawText = wordText.trim();
+      const lower = rawText.replace(/_/g, ' ').toLowerCase();
+      
       if (!lower) {
         editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-[11px] text-center py-2">請輸入單詞以匹配詞庫</div>`;
         uploadNewTagBtn.classList.add('hidden');
         return;
       }
 
-      const match = databaseTags.find(item => item.english.toLowerCase() === lower);
-      if (match) {
+      // 狀況 A：完全符合
+      const exactMatch = databaseTags.find(item => item.english.toLowerCase() === lower);
+      if (exactMatch) {
         uploadNewTagBtn.classList.add('hidden');
         editTagLibraryInfo.innerHTML = `
           <div class="flex items-center gap-1.5 text-slate-700 font-bold">
-            <i class="fa-solid fa-language text-blue-500"></i> 中文對照: <span class="text-blue-600 font-black">${match.chinese || '無'}</span>
+            <i class="fa-solid fa-language text-blue-500"></i> 中文對照: <span class="text-blue-600 font-black">${exactMatch.chinese || '無'}</span>
           </div>`;
-        if (match.subCategories.length > 0) {
+        if (exactMatch.subCategories.length > 0) {
           const subDiv = document.createElement('div');
           subDiv.className = "flex flex-wrap gap-1 mt-1.5 items-center text-slate-500 text-[10px]";
           subDiv.innerHTML = `<span class="font-bold text-slate-400">小標籤: </span>`;
-          match.subCategories.forEach(sub => {
+          exactMatch.subCategories.forEach(sub => {
             subDiv.innerHTML += `<span class="bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-600 font-semibold">${sub}</span>`;
           });
           editTagLibraryInfo.appendChild(subDiv);
         } else {
           editTagLibraryInfo.innerHTML += `<div class="text-[10px] text-slate-400 mt-1">無附加小標籤分類。</div>`;
         }
+        return;
+      }
+
+      // 當不完全符合時顯示上傳按鈕
+      uploadNewTagBtn.classList.remove('hidden');
+
+      // 狀況 B：角色格式特徵推測
+      const charPattern = lower.match(/(?:\\\(|\/\(|\s\()/);
+      if (charPattern && charPattern.index > 0) {
+          let cName = rawText.substring(0, charPattern.index).trim().replace(/^[\(\[\{]+/, '').replace(/[:0-9\.\)]+$/, '');
+          editTagLibraryInfo.innerHTML = `
+            <div class="p-2.5 bg-rose-50 border border-rose-100 rounded-xl relative overflow-hidden">
+               <div class="absolute -right-2 -top-2 opacity-10"><i class="fa-solid fa-user text-5xl text-rose-500"></i></div>
+               <div class="text-xs font-bold text-rose-600 mb-1 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> 角色結構推測</div>
+               <div class="text-xs text-slate-600 font-medium">偵測到特殊括號結構，推測此標籤為角色：<br/><span class="font-black text-rose-500 text-sm mt-1 inline-block">${cName}</span></div>
+            </div>
+          `;
+          return;
+      }
+
+      // 狀況 C：複合詞拆解分析
+      let searchStr = lower;
+      let possibleMatches = [];
+      
+      databaseTags.forEach(dbTag => {
+          const eng = dbTag.english.toLowerCase();
+          if(eng.length < 2) return; // 忽略單一字母避免雜訊
+          const escapedEng = eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`\\b${escapedEng}\\b`, 'i');
+          const matchObj = searchStr.match(regex);
+          if (matchObj) {
+              possibleMatches.push({
+                  item: dbTag,
+                  index: matchObj.index,
+                  length: eng.length
+              });
+          }
+      });
+
+      // 依長度排序 (長的單字優先，避免 book 蓋掉 comic book)，再依索引排序
+      possibleMatches.sort((a, b) => b.length - a.length);
+
+      let finalMatches = [];
+      let maskedStr = searchStr;
+      possibleMatches.forEach(pm => {
+          const escapedEng = pm.item.english.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`\\b${escapedEng}\\b`, 'i');
+          if (regex.test(maskedStr)) {
+              finalMatches.push(pm);
+              // 將比對到的字串轉換為等長空白，防止重疊比對
+              maskedStr = maskedStr.replace(regex, ' '.repeat(pm.length)); 
+          }
+      });
+
+      // 重新依據出現順序排序，並取前 3 個
+      finalMatches.sort((a, b) => a.index - b.index);
+      finalMatches = finalMatches.slice(0, 3);
+
+      if (finalMatches.length > 0) {
+         let html = `<div class="text-[11px] font-black text-slate-500 mb-2 border-b border-slate-200 pb-1.5 flex items-center gap-1.5"><i class="fa-solid fa-puzzle-piece text-indigo-400"></i> 複合詞拆解分析</div>`;
+         html += `<div class="space-y-2 mt-1">`;
+         
+         const orderLabels = ['第一位', '第二位', '第三位'];
+         finalMatches.forEach((matchData, idx) => {
+             const t = matchData.item;
+             const subTags = t.subCategories.length > 0 ? t.subCategories.join('、') : '無';
+             html += `
+               <div class="flex flex-col bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm relative transition-all hover:border-indigo-200">
+                  <span class="absolute top-1.5 right-2.5 text-[10px] font-black text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded">${orderLabels[idx]}</span>
+                  <div class="flex items-center gap-1.5 mb-1.5">
+                      <span class="text-sm font-black text-indigo-600">${t.english}</span>
+                  </div>
+                  <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px]">
+                      <div class="text-slate-500 flex flex-col"><span class="font-bold text-slate-400 text-[9px] uppercase tracking-wide">中文對照</span> <span class="font-bold text-slate-700">${t.chinese || '無'}</span></div>
+                      <div class="text-slate-500 flex flex-col"><span class="font-bold text-slate-400 text-[9px] uppercase tracking-wide">分類</span> <span class="font-bold text-slate-700">${normalizeCategoryName(t.category)}</span></div>
+                      <div class="text-slate-500 col-span-2 flex flex-col"><span class="font-bold text-slate-400 text-[9px] uppercase tracking-wide">小標籤</span> <span class="text-slate-600">${subTags}</span></div>
+                  </div>
+               </div>
+             `;
+         });
+         html += `</div>`;
+         editTagLibraryInfo.innerHTML = html;
       } else {
-        uploadNewTagBtn.classList.remove('hidden');
-        const partialMatches = databaseTags.filter(item => item.english && lower.includes(item.english.toLowerCase()));
-        if (partialMatches.length > 0) {
-          editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-[11px]">未發現完整匹配，您可參考右側詞庫</div>`;
-        } else {
-          editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-center text-xs py-2">雲端詞庫中查無此標籤資料</div>`;
-        }
+         editTagLibraryInfo.innerHTML = `<div class="text-slate-400 italic text-center text-xs py-2">雲端詞庫中查無此標籤及相關部件</div>`;
       }
     }
 
@@ -1508,7 +1601,6 @@
         if (b) { lBrack = b.substring(0, b.length/2); rBrack = b.substring(b.length/2); }
       }
 
-      // 支援逗號拆分
       const parsedTags = parsePrompt(editedText);
       if (parsedTags.length === 0) return;
 
@@ -1522,7 +1614,6 @@
         for(let p of prompts) {
           let idx = p.tags.findIndex(t => t.id === activeTagId);
           if(idx > -1) {
-            // 如果原本是固定的標籤，編輯後維持固定屬性
             const wasPinned = p.tags[idx].isPinned;
             parsedTags.forEach(t => t.isPinned = wasPinned);
             
@@ -1537,7 +1628,7 @@
         showToast(`成功新增 ${parsedTags.length} 個標籤！`, 'success');
       }
 
-      renderCategoryLegends(); // 防止新類別未上色
+      renderCategoryLegends(); 
       renderTags();
       updateRawInput();
       editModal.classList.add('hidden');
@@ -1912,14 +2003,12 @@
       activeTagId = tag.id;
       menuTagTitle.innerText = `${tag.cleanWord}`;
       
-      // 更新隱藏圖示
       if (tag.isHidden) {
         hideMenuText.innerText = "顯示標籤"; hideMenuIcon.className = "fa-solid fa-eye text-slate-400 w-4";
       } else {
         hideMenuText.innerText = "隱藏標籤"; hideMenuIcon.className = "fa-solid fa-eye-slash text-slate-400 w-4";
       }
 
-      // 更新固定標籤圖示
       if (tag.isPinned) {
         pinMenuText.innerText = "解除固定"; pinMenuIcon.className = "fa-solid fa-thumbtack text-amber-500 w-4 transform -rotate-45";
       } else {
@@ -1957,13 +2046,11 @@
     confirmInputBtn.addEventListener('click', () => {
       const p = prompts.find(pr => pr.id === activePromptId);
       
-      // 在覆蓋當前槽位標籤前，先備份「被固定」的標籤狀態
       const oldPinnedMap = {};
       p.tags.forEach(t => { if(t.isPinned) oldPinnedMap[t.cleanWord] = true; });
 
       p.tags = parsePrompt(rawPromptInput.value);
       
-      // 將固定狀態繼承回新標籤
       p.tags.forEach(t => { if(oldPinnedMap[t.cleanWord]) t.isPinned = true; });
 
       renderCategoryLegends(); renderTags(); inputDrawer.classList.add('hidden');
@@ -1991,7 +2078,6 @@
       closeContextMenu();
     });
 
-    // --- 固定標籤點擊事件 ---
     menuPinBtn.addEventListener('click', () => {
       const tag = getTagGlobally(activeTagId);
       if (tag) {
@@ -2015,7 +2101,6 @@
       closeContextMenu();
     });
 
-    // --- 複製全區邏輯 ---
     quickCopyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!isCategorizationMode) {
@@ -2098,10 +2183,8 @@
       const pid = categorySlots[catName] || activePromptId;
       const p = prompts.find(pr => pr.id === pid);
       
-      // 隱藏選中槽位的一般標籤
       if(p) { p.tags.forEach(t => { if (t.category === catName && !t.isPinned) t.isHidden = shouldHide; }); }
       
-      // 全局隱藏被「固定」的標籤
       prompts.forEach(pr => {
          pr.tags.forEach(t => { if (t.category === catName && t.isPinned) t.isHidden = shouldHide; });
       });
@@ -2136,7 +2219,6 @@
       }
     });
 
-    // --- 清除防呆勾選 Modal 邏輯 ---
     quickClearBtn.addEventListener('click', () => {
       const container = document.getElementById('clearPromptCheckboxes');
       container.innerHTML = '';
